@@ -38,6 +38,7 @@ class FinalEvaluation:
     y_test: np.ndarray
     predictions: np.ndarray
     test_data: pl.DataFrame
+    pipeline: Pipeline
 
 
 def build_final_pipeline() -> Pipeline:
@@ -152,4 +153,5 @@ def run_final_evaluation() -> FinalEvaluation:
         y_test=y_test,
         predictions=predictions,
         test_data=test,
+        pipeline=pipeline,
     )
