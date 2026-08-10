@@ -1,0 +1,34 @@
+[project]
+name = "pi4-imoveis-sp"
+version = "0.1.0"
+description = "Análise e estimativa de valores de apartamentos residenciais na cidade de São Paulo utilizando dados do ITBI 2025 e aprendizado de máquina."
+readme = "README.md"
+authors = [
+    { name = "Gustavo Almeida", email = "gustavoalmeida_122@hotmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+pi4-imoveis-sp = "pi4_imoveis_sp:main"
+
+[build-system]
+requires = ["uv_build>=0.11.24,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.2",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
