@@ -170,6 +170,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastexcel" },
+    { name = "joblib" },
     { name = "pandas" },
     { name = "polars" },
     { name = "pyarrow" },
@@ -186,6 +187,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastexcel", specifier = ">=0.20.2" },
+    { name = "joblib", specifier = ">=1.5.3" },
     { name = "pandas", specifier = ">=3.0.5" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "pyarrow", specifier = ">=25.0.1" },
