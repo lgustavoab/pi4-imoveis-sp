@@ -23,10 +23,7 @@ def print_sheet(
     print(sheet_name)
     print("=" * 100)
 
-    print(
-        f"\nDimensões: "
-        f"{dataframe.height} linhas x {dataframe.width} colunas"
-    )
+    print(f"\nDimensões: {dataframe.height} linhas x {dataframe.width} colunas")
 
     print("\nColunas:")
     for index, column in enumerate(dataframe.columns, start=1):
@@ -44,9 +41,7 @@ def print_sheet(
 
 def main() -> None:
     if not ITBI_FILE.exists():
-        raise FileNotFoundError(
-            f"Arquivo do ITBI não encontrado em: {ITBI_FILE}"
-        )
+        raise FileNotFoundError(f"Arquivo do ITBI não encontrado em: {ITBI_FILE}")
 
     print("=" * 100)
     print("DICIONÁRIO E TABELAS AUXILIARES — ITBI 2025")

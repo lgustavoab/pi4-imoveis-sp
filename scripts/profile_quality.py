@@ -40,17 +40,13 @@ def load_apartment_sales() -> pl.DataFrame:
         dataframe = sheets[sheet_name]
 
         unnamed_columns = [
-            column
-            for column in dataframe.columns
-            if column.startswith("__UNNAMED__")
+            column for column in dataframe.columns if column.startswith("__UNNAMED__")
         ]
 
         if unnamed_columns:
             dataframe = dataframe.drop(unnamed_columns)
 
-        dataframe = dataframe.with_columns(
-            pl.lit(sheet_name).alias("Mês de Origem")
-        )
+        dataframe = dataframe.with_columns(pl.lit(sheet_name).alias("Mês de Origem"))
 
         frames.append(dataframe)
 
@@ -88,14 +84,9 @@ def print_quantiles(
     print("-" * 80)
 
     for quantile in quantiles:
-        value = dataframe.select(
-            pl.col(column).quantile(quantile)
-        ).item()
+        value = dataframe.select(pl.col(column).quantile(quantile)).item()
 
-        print(
-            f"P{quantile * 100:>5.1f}: "
-            f"{value:,.2f}"
-        )
+        print(f"P{quantile * 100:>5.1f}: {value:,.2f}")
 
 
 def main() -> None:
@@ -216,11 +207,7 @@ def main() -> None:
         )
 
     suspicious_neighborhoods = (
-        dataframe
-        .filter(
-            pl.col("Bairro").is_not_null()
-            & condition
-        )
+        dataframe.filter(pl.col("Bairro").is_not_null() & condition)
         .group_by("Bairro")
         .len()
         .sort("len", descending=True)
@@ -232,9 +219,7 @@ def main() -> None:
     print("\n7. CEP")
     print("=" * 80)
 
-    valid_cep = dataframe.filter(
-        pl.col("CEP").is_not_null()
-    ).height
+    valid_cep = dataframe.filter(pl.col("CEP").is_not_null()).height
 
     print(
         f"CEP preenchido: "
@@ -242,9 +227,7 @@ def main() -> None:
         f"({valid_cep / dataframe.height * 100:.2f}%)"
     )
 
-    distinct_cep = dataframe.select(
-        pl.col("CEP").drop_nulls().n_unique()
-    ).item()
+    distinct_cep = dataframe.select(pl.col("CEP").drop_nulls().n_unique()).item()
 
     print(f"CEPs distintos: {distinct_cep:,}")
 
