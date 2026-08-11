@@ -2,7 +2,6 @@ from pathlib import Path
 
 import polars as pl
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 RAW_FILE = PROJECT_ROOT / "data" / "raw" / "itbi_2025.xlsx"
@@ -57,30 +56,23 @@ EXPECTED_COLUMNS = (
 
 def validate_source_file(path: Path = RAW_FILE) -> None:
     if not path.exists():
-        raise FileNotFoundError(
-            f"Arquivo bruto do ITBI não encontrado: {path}"
-        )
+        raise FileNotFoundError(f"Arquivo bruto do ITBI não encontrado: {path}")
 
 
 def remove_undocumented_columns(
     dataframe: pl.DataFrame,
 ) -> pl.DataFrame:
     extra_columns = [
-        column
-        for column in dataframe.columns
-        if column not in EXPECTED_COLUMNS
+        column for column in dataframe.columns if column not in EXPECTED_COLUMNS
     ]
 
     unexpected_columns = [
-        column
-        for column in extra_columns
-        if not column.startswith("__UNNAMED__")
+        column for column in extra_columns if not column.startswith("__UNNAMED__")
     ]
 
     if unexpected_columns:
         raise ValueError(
-            "Foram encontradas colunas extras não reconhecidas: "
-            f"{unexpected_columns}"
+            f"Foram encontradas colunas extras não reconhecidas: {unexpected_columns}"
         )
 
     if extra_columns:
@@ -94,9 +86,7 @@ def validate_schema(
     sheet_name: str,
 ) -> None:
     missing_columns = [
-        column
-        for column in EXPECTED_COLUMNS
-        if column not in dataframe.columns
+        column for column in EXPECTED_COLUMNS if column not in dataframe.columns
     ]
 
     if missing_columns:
@@ -123,15 +113,11 @@ def load_monthly_sheets(
     )
 
     missing_sheets = [
-        sheet_name
-        for sheet_name in MONTH_SHEETS
-        if sheet_name not in sheets
+        sheet_name for sheet_name in MONTH_SHEETS if sheet_name not in sheets
     ]
 
     if missing_sheets:
-        raise ValueError(
-            f"Abas mensais ausentes no arquivo: {missing_sheets}"
-        )
+        raise ValueError(f"Abas mensais ausentes no arquivo: {missing_sheets}")
 
     return sheets
 
@@ -154,9 +140,7 @@ def build_interim_dataframe(
 
         dataframe = dataframe.with_columns(
             pl.lit(sheet_name).alias("source_sheet"),
-            pl.lit(month_number)
-            .cast(pl.Int8)
-            .alias("source_month"),
+            pl.lit(month_number).cast(pl.Int8).alias("source_month"),
         )
 
         monthly_frames.append(dataframe)

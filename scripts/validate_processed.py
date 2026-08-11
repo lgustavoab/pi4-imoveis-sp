@@ -10,7 +10,6 @@ from pi4_imoveis_sp.data.cleaning import (
     VALUE_COLUMN,
 )
 
-
 EXPECTED_ROWS = 64_951
 EXPECTED_COLUMNS = 37
 EXPECTED_LOW_VALUE_M2 = 1_074

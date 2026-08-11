@@ -3,6 +3,11 @@ import plotly.express as px
 import streamlit as st
 
 from pi4_imoveis_sp.ml.inference import load_model_metadata
+from pi4_imoveis_sp.presentation import format_currency
+from pi4_imoveis_sp.visualization import (
+    PLOTLY_CHART_CONFIG,
+    lock_chart_interactions,
+)
 
 
 @st.cache_data(show_spinner=False)
@@ -10,20 +15,17 @@ def load_metadata() -> dict:
     return load_model_metadata()
 
 
-def format_currency(value: float) -> str:
-    formatted = f"{value:,.2f}"
-
-    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
-
-    return f"R$ {formatted}"
-
-
 def main() -> None:
     st.title("Modelo de Machine Learning")
 
     st.write(
-        "Desempenho e interpretação do modelo desenvolvido para "
-        "estimar o valor de apartamentos residenciais em São Paulo."
+        "Desempenho, comparação e interpretação do modelo desenvolvido "
+        "para estimar o valor de apartamentos residenciais em São Paulo."
+    )
+
+    st.caption(
+        "O desempenho final foi medido em um período posterior ao utilizado "
+        "para o treinamento, preservando a ordem temporal das transações."
     )
 
     metadata = load_metadata()
@@ -39,18 +41,32 @@ def main() -> None:
         st.metric(
             "MAE",
             format_currency(metrics["mae"]),
+            help=(
+                "Erro Absoluto Médio. Representa, em média, "
+                "a diferença absoluta entre o valor real "
+                "e o valor estimado pelo modelo."
+            ),
         )
 
     with metric_2:
         st.metric(
             "RMSE",
             format_currency(metrics["rmse"]),
+            help=(
+                "Raiz do Erro Quadrático Médio. Penaliza mais "
+                "fortemente previsões com erros muito elevados."
+            ),
         )
 
     with metric_3:
         st.metric(
             "R²",
             f"{metrics['r2']:.4f}",
+            help=(
+                "Coeficiente de determinação. Indica quanto da "
+                "variação dos valores observados é explicada "
+                "pelas previsões do modelo."
+            ),
         )
 
     st.caption(
@@ -58,9 +74,21 @@ def main() -> None:
         "O modelo foi treinado com os registros de janeiro a novembro."
     )
 
+    st.info(
+        "**Como interpretar:** valores menores de MAE e RMSE indicam "
+        "menores erros de previsão. Para o R², valores mais próximos "
+        "de 1 indicam maior capacidade de explicar a variação observada "
+        "nos dados."
+    )
+
     st.divider()
 
     st.subheader("Comparação dos modelos")
+
+    st.write(
+        "Diferentes algoritmos foram comparados antes da escolha "
+        "da configuração utilizada pelo modelo."
+    )
 
     model_results = pd.DataFrame(
         {
@@ -68,8 +96,8 @@ def main() -> None:
                 "Dummy",
                 "Regressão Linear",
                 "Random Forest",
-                "XGBoost inicial",
-                "XGBoost selecionado",
+                "XGBoost inicial (com mês)",
+                "XGBoost selecionado (sem mês)",
             ],
             "MAE": [
                 445_167.17,
@@ -111,9 +139,12 @@ def main() -> None:
             tickprefix="R$ ",
         )
 
+        mae_chart = lock_chart_interactions(mae_chart)
+
         st.plotly_chart(
             mae_chart,
             width="stretch",
+            config=PLOTLY_CHART_CONFIG,
         )
 
     with chart_2:
@@ -130,9 +161,12 @@ def main() -> None:
             showlegend=False,
         )
 
+        r2_chart = lock_chart_interactions(r2_chart)
+
         st.plotly_chart(
             r2_chart,
             width="stretch",
+            config=PLOTLY_CHART_CONFIG,
         )
 
     st.caption(
@@ -144,6 +178,11 @@ def main() -> None:
     st.divider()
 
     st.subheader("Importância das variáveis")
+
+    st.write(
+        "A análise abaixo mostra quanto o desempenho do modelo piora "
+        "quando a informação de cada variável é embaralhada."
+    )
 
     feature_importance = pd.DataFrame(
         {
@@ -176,7 +215,7 @@ def main() -> None:
         orientation="h",
         text="Aumento do MAE",
         labels={
-            "Aumento do MAE": "Aumento do MAE após permutação (R$)",
+            "Aumento do MAE": ("Aumento do MAE após permutação (R$)"),
             "Variável": "",
         },
     )
@@ -200,15 +239,24 @@ def main() -> None:
         rangemode="tozero",
     )
 
+    importance_chart = lock_chart_interactions(importance_chart)
+
     st.plotly_chart(
         importance_chart,
         width="stretch",
+        config=PLOTLY_CHART_CONFIG,
     )
 
     st.caption(
         "A importância foi calculada por Permutation Importance. "
         "Valores maiores indicam maior perda de desempenho quando "
         "a informação da variável é embaralhada."
+    )
+
+    st.info(
+        "A importância indica contribuição para a capacidade preditiva "
+        "do modelo. Ela não demonstra que uma variável causa diretamente "
+        "o aumento ou a redução do valor de um imóvel."
     )
 
     st.divider()
@@ -222,13 +270,19 @@ def main() -> None:
             """
             **Algoritmo final:** XGBoost
 
-            **Features utilizadas:**
+            **Variáveis utilizadas:**
             - Área construída
             - CEP4
             - Padrão IPTU
             - Idade do imóvel
             - Fração ideal
             """
+        )
+
+        st.caption(
+            "CEP4 corresponde aos quatro primeiros dígitos do CEP "
+            "e é utilizado pelo modelo como informação aproximada "
+            "de localização."
         )
 
     with config_2:
@@ -248,10 +302,9 @@ def main() -> None:
     st.subheader("Limitações observadas")
 
     st.warning(
-        "O desempenho do modelo diminui para imóveis de valores "
-        "muito elevados e padrões superiores, principalmente devido "
-        "à menor quantidade de exemplos e à maior heterogeneidade "
-        "desse segmento."
+        "O desempenho do modelo foi inferior para imóveis de valores "
+        "muito elevados e para alguns padrões menos frequentes. "
+        "Esses segmentos devem ser interpretados com maior cautela."
     )
 
     st.write(
@@ -261,9 +314,10 @@ def main() -> None:
         "elevados, aumentando principalmente o RMSE."
     )
 
-    st.info(
-        "As importâncias apresentadas representam contribuição preditiva "
-        "para o modelo e não devem ser interpretadas como relações causais."
+    st.caption(
+        "As métricas apresentadas nesta página correspondem à avaliação "
+        "do modelo e não representam garantia de precisão para uma "
+        "estimativa individual."
     )
 
 

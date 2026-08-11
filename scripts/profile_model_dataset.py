@@ -2,7 +2,6 @@ from pathlib import Path
 
 import polars as pl
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ITBI_FILE = PROJECT_ROOT / "data" / "raw" / "itbi_2025.xlsx"
 

@@ -2,11 +2,20 @@ import polars as pl
 import streamlit as st
 from sklearn.pipeline import Pipeline
 
+from pi4_imoveis_sp.analysis.estimator import (
+    format_cep,
+    get_pattern_options,
+    normalize_cep,
+)
 from pi4_imoveis_sp.data.cleaning import PROCESSED_FILE
 from pi4_imoveis_sp.ml.inference import (
     load_model_metadata,
     load_production_model,
     predict_apartment_price,
+)
+from pi4_imoveis_sp.presentation import (
+    format_currency,
+    format_integer,
 )
 
 REFERENCE_YEAR = 2025
@@ -32,55 +41,19 @@ def load_reference_data() -> pl.DataFrame:
     )
 
 
-def format_currency(value: float) -> str:
-    formatted = f"{value:,.2f}"
-
-    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
-
-    return f"R$ {formatted}"
-
-
-def normalize_cep(cep: str) -> str:
-    return "".join(character for character in cep if character.isdigit())
-
-
-def get_pattern_options(
-    dataframe: pl.DataFrame,
-) -> dict[int, str]:
-    patterns = (
-        dataframe.select(
-            [
-                "Padrão (IPTU)",
-                "Descrição do padrão (IPTU)",
-            ]
-        )
-        .unique()
-        .sort("Padrão (IPTU)")
-    )
-
-    options: dict[int, str] = {}
-
-    for row in patterns.iter_rows(named=True):
-        code = row["Padrão (IPTU)"]
-        description = row["Descrição do padrão (IPTU)"]
-
-        if code is None:
-            continue
-
-        if description:
-            options[code] = f"{code} — {description}"
-        else:
-            options[code] = str(code)
-
-    return options
-
-
 def main() -> None:
     st.title("Estimador de Valor")
 
     st.write(
-        "Informe as características do apartamento para obter "
-        "uma estimativa de valor com o modelo XGBoost."
+        "Informe as características do imóvel para obter "
+        "uma estimativa do valor de transação utilizando "
+        "o modelo XGBoost."
+    )
+
+    st.caption(
+        "A previsão representa uma estimativa estatística do valor "
+        "de transação declarado. Ela não corresponde ao valor venal, "
+        "ao preço de anúncio e não substitui uma avaliação imobiliária."
     )
 
     model = load_model()
@@ -103,35 +76,52 @@ def main() -> None:
                 max_value=3_000.0,
                 value=80.0,
                 step=1.0,
+                help=(
+                    "Informe preferencialmente a área "
+                    "construída registrada no cadastro "
+                    "do IPTU."
+                ),
             )
 
             cep = st.text_input(
                 "CEP",
                 placeholder="Ex.: 04303-000",
                 help=(
-                    "O modelo utiliza os quatro primeiros "
-                    "dígitos do CEP como informação de localização."
+                    "O CEP completo é utilizado para obter o CEP4, "
+                    "formado pelos quatro primeiros dígitos. "
+                    "O modelo utiliza o CEP4 como informação "
+                    "aproximada de localização."
                 ),
             )
 
             construction_year = st.number_input(
-                "Ano de construção / ACC",
+                "Ano de conclusão da construção (ACC)",
                 min_value=1919,
-                max_value=2025,
+                max_value=REFERENCE_YEAR,
                 value=2010,
                 step=1,
                 help=(
-                    "Use preferencialmente o ano de conclusão "
-                    "da construção registrado no IPTU."
+                    "ACC corresponde ao Ano de Conclusão "
+                    "da Construção registrado no cadastro "
+                    "do IPTU. Utilize esse valor quando "
+                    "estiver disponível."
                 ),
             )
 
         with column_2:
             iptu_pattern = st.selectbox(
-                "Padrão IPTU",
+                "Padrão construtivo do IPTU",
                 options=list(pattern_options),
+                index=None,
+                placeholder=("Selecione o padrão do imóvel"),
                 format_func=lambda code: pattern_options[code],
-                help=("Código de padrão construtivo utilizado no cadastro do IPTU."),
+                help=(
+                    "Os códigos representam padrões construtivos "
+                    "diferentes. Mesmo quando dois códigos possuem "
+                    "a mesma descrição geral, eles podem representar "
+                    "padrões distintos. Utilize preferencialmente "
+                    "o código presente no cadastro do imóvel."
+                ),
             )
 
             ideal_fraction = st.number_input(
@@ -142,10 +132,18 @@ def main() -> None:
                 step=0.0001,
                 format="%.4f",
                 help=(
-                    "Fração ideal do terreno associada à unidade, "
-                    "conforme cadastro do imóvel."
+                    "Representa a fração do terreno associada "
+                    "à unidade no cadastro do imóvel. "
+                    "Informe o valor em formato decimal. "
+                    "Por exemplo, 0.0100 corresponde a 1%."
                 ),
             )
+
+        st.caption(
+            "Para obter uma estimativa mais coerente com os dados "
+            "utilizados no treinamento, informe as características "
+            "conforme constam no cadastro do imóvel sempre que possível."
+        )
 
         submitted = st.form_submit_button(
             "Estimar valor",
@@ -155,9 +153,13 @@ def main() -> None:
 
     if not submitted:
         st.caption(
-            "A estimativa é baseada exclusivamente nas características "
-            "informadas e nos dados do ITBI de 2025."
+            "O modelo foi desenvolvido a partir das transações "
+            "registradas nas guias de ITBI pagas em 2025."
         )
+        return
+
+    if iptu_pattern is None:
+        st.error("Selecione o padrão construtivo do IPTU.")
         return
 
     normalized_cep = normalize_cep(cep)
@@ -165,6 +167,8 @@ def main() -> None:
     if len(normalized_cep) != 8:
         st.error("Informe um CEP válido com 8 dígitos.")
         return
+
+    formatted_cep = format_cep(normalized_cep)
 
     cep4 = normalized_cep[:4]
 
@@ -188,6 +192,12 @@ def main() -> None:
 
     estimated_value_m2 = prediction / area
 
+    selected_pattern_label = pattern_options[iptu_pattern]
+
+    formatted_area = format_integer(round(area))
+
+    ideal_fraction_percentage = ideal_fraction * 100
+
     st.divider()
 
     st.subheader("Resultado da estimativa")
@@ -196,7 +206,7 @@ def main() -> None:
 
     with result_1:
         st.metric(
-            "Valor estimado",
+            "Valor de transação estimado",
             format_currency(prediction),
         )
 
@@ -206,35 +216,48 @@ def main() -> None:
             format_currency(estimated_value_m2),
         )
 
+    st.caption(
+        "O valor por m² acima é calculado a partir da estimativa "
+        "gerada pelo modelo e da área construída informada."
+    )
+
     st.markdown(
         f"""
         **Dados utilizados na previsão**
 
-        - Área construída: **{area:,.0f} m²**
-        - CEP informado: **{cep}**
+        - Área construída: **{formatted_area} m²**
+        - CEP informado: **{formatted_cep}**
         - Região utilizada pelo modelo (CEP4): **{cep4}**
-        - Padrão IPTU: **{iptu_pattern}**
-        - Ano de construção / ACC: **{construction_year}**
+        - Padrão IPTU: **{selected_pattern_label}**
+        - Ano de conclusão da construção (ACC): **{construction_year}**
         - Idade utilizada pelo modelo: **{property_age} anos**
-        - Fração ideal: **{ideal_fraction:.4f}**
+        - Fração ideal: **{ideal_fraction:.4f} ({ideal_fraction_percentage:.2f}%)**
         """
     )
 
     official_metrics = metadata["official_evaluation"]["metrics"]
 
     st.info(
-        "Esta é uma estimativa estatística, não uma avaliação "
-        "imobiliária oficial. No teste temporal independente, "
-        f"o modelo apresentou MAE de "
-        f"{format_currency(official_metrics['mae'])}."
+        "Esta é uma estimativa estatística e não uma avaliação "
+        "imobiliária oficial. No teste temporal independente "
+        "realizado em dezembro de 2025, o modelo apresentou MAE de "
+        f"{format_currency(official_metrics['mae'])}. "
+        "Esse valor representa o erro absoluto médio do conjunto "
+        "avaliado e não uma margem de erro fixa para cada previsão."
     )
 
     if prediction >= 5_000_000:
         st.warning(
-            "Imóveis de alto valor apresentaram maior erro durante "
-            "a avaliação do modelo. Interprete esta estimativa com "
-            "cautela."
+            "Imóveis de alto valor apresentaram erros maiores "
+            "durante a avaliação do modelo. Estimativas nessa "
+            "faixa devem ser interpretadas com maior cautela."
         )
+
+    st.divider()
+
+    st.caption(
+        "Fonte dos dados: Prefeitura de São Paulo — Guias de ITBI pagas em 2025."
+    )
 
 
 main()

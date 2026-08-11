@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import polars as pl
 
 from pi4_imoveis_sp.data.ingestion import (
@@ -7,7 +5,6 @@ from pi4_imoveis_sp.data.ingestion import (
     INTERIM_FILE,
     MONTH_SHEETS,
 )
-
 
 EXPECTED_TOTAL_ROWS = 230_525
 EXPECTED_TOTAL_COLUMNS = 30

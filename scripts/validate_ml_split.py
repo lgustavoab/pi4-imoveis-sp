@@ -1,7 +1,6 @@
 from pi4_imoveis_sp.ml.dataset import FEATURE_COLUMNS
 from pi4_imoveis_sp.ml.split import build_temporal_split
 
-
 EXPECTED_TRAIN_ROWS = 52_911
 EXPECTED_VALIDATION_ROWS = 4_930
 EXPECTED_TEST_ROWS = 5_966
