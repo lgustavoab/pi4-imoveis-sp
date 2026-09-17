@@ -15,7 +15,7 @@ from pi4_imoveis_sp.ml.dataset import (
     NUMERICAL_FEATURES,
     NUMERICAL_FEATURES_WITHOUT_MONTH,
 )
-from pi4_imoveis_sp.ml.split import build_temporal_split
+from pi4_imoveis_sp.ml.split import build_selection_split
 
 
 @dataclass(frozen=True)
@@ -116,7 +116,7 @@ def calculate_metrics(
 def run_xgboost(
     include_month: bool = True,
 ) -> XGBoostMetrics:
-    split = build_temporal_split(
+    split = build_selection_split(
         include_month=include_month,
     )
 

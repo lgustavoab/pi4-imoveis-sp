@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 import pi4_imoveis_sp.ml.dataset as dataset_module
+import pi4_imoveis_sp.ml.split as split_module
 from pi4_imoveis_sp.data.cleaning import (
     AREA_COLUMN,
     TRANSACTION_DATE_COLUMN,
@@ -14,7 +15,7 @@ from pi4_imoveis_sp.ml.dataset import (
     TARGET_COLUMN,
     build_model_dataset,
 )
-from pi4_imoveis_sp.ml.split import build_temporal_partitions
+from pi4_imoveis_sp.ml.split import build_selection_split, build_temporal_partitions
 
 
 def build_synthetic_model_dataframe() -> pl.DataFrame:
@@ -73,7 +74,7 @@ def test_model_dataset_contains_only_2025(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(
         dataset_module,
         "load_processed_dataset",
-        lambda: dataframe,
+        lambda **_: dataframe,
     )
 
     result = build_model_dataset(
@@ -102,7 +103,7 @@ def test_model_dataset_rejects_record_outside_2025(
     monkeypatch.setattr(
         dataset_module,
         "load_processed_dataset",
-        lambda: dataframe,
+        lambda **_: dataframe,
     )
 
     with pytest.raises(ValueError, match="fora de 2025"):
@@ -172,3 +173,72 @@ def test_temporal_partitions_reject_record_outside_2025() -> None:
 
     with pytest.raises(ValueError, match="fora de 2025"):
         build_temporal_partitions(dataframe)
+
+
+def test_selection_split_returns_only_train_and_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataframe = (
+        build_synthetic_model_dataframe()
+        .filter(pl.col(TRANSACTION_DATE_COLUMN) < date(2025, 12, 1))
+        .with_columns(pl.col(TRANSACTION_DATE_COLUMN).dt.month().alias("mes_transacao"))
+    )
+
+    def build_selection_dataset(**kwargs) -> pl.DataFrame:
+        assert kwargs["transaction_start"] == date(2025, 1, 1)
+        assert kwargs["transaction_end"] == date(2025, 12, 1)
+        return dataframe
+
+    monkeypatch.setattr(
+        split_module,
+        "build_model_dataset",
+        build_selection_dataset,
+    )
+
+    result = build_selection_split(include_month=True)
+
+    assert tuple(result.__dataclass_fields__) == (
+        "x_train",
+        "y_train",
+        "x_validation",
+        "y_validation",
+    )
+    assert result.y_train.to_list() == [200_000.0, 300_000.0]
+    assert result.y_validation.to_list() == [400_000.0, 500_000.0]
+    assert result.x_train.get_column("mes_transacao").to_list() == [1, 10]
+    assert result.x_validation.get_column("mes_transacao").to_list() == [11, 11]
+    assert set(result.y_train).isdisjoint(result.y_validation)
+    assert 600_000.0 not in result.y_train
+    assert 600_000.0 not in result.y_validation
+
+
+@pytest.mark.parametrize(
+    "invalid_date",
+    [
+        date(2024, 12, 31),
+        date(2025, 12, 1),
+        date(2026, 1, 1),
+    ],
+)
+def test_selection_split_rejects_dates_outside_selection_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_date: date,
+) -> None:
+    dataframe = build_synthetic_model_dataframe().filter(
+        pl.col(TRANSACTION_DATE_COLUMN) < date(2025, 12, 1)
+    )
+    dataframe = dataframe.with_columns(
+        pl.when(pl.col("record_id") == 1)
+        .then(invalid_date)
+        .otherwise(pl.col(TRANSACTION_DATE_COLUMN))
+        .alias(TRANSACTION_DATE_COLUMN)
+    )
+
+    monkeypatch.setattr(
+        split_module,
+        "build_model_dataset",
+        lambda **_: dataframe,
+    )
+
+    with pytest.raises(ValueError, match="fora de janeiro a novembro"):
+        build_selection_split(include_month=False)

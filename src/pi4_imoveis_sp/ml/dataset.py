@@ -1,3 +1,5 @@
+from datetime import date
+
 import polars as pl
 
 from pi4_imoveis_sp.data.cleaning import (
@@ -60,11 +62,25 @@ LEAKAGE_COLUMNS = (
 )
 
 
-def load_processed_dataset() -> pl.DataFrame:
+def load_processed_dataset(
+    transaction_start: date | None = None,
+    transaction_end: date | None = None,
+) -> pl.DataFrame:
     if not PROCESSED_FILE.exists():
         raise FileNotFoundError(f"Dataset processado não encontrado: {PROCESSED_FILE}")
 
-    return pl.read_parquet(PROCESSED_FILE)
+    if (transaction_start is None) != (transaction_end is None):
+        raise ValueError("Os limites temporais devem ser informados em conjunto.")
+
+    lazyframe = pl.scan_parquet(PROCESSED_FILE)
+
+    if transaction_start is not None and transaction_end is not None:
+        lazyframe = lazyframe.filter(
+            (pl.col(TRANSACTION_DATE_COLUMN) >= transaction_start)
+            & (pl.col(TRANSACTION_DATE_COLUMN) < transaction_end)
+        )
+
+    return lazyframe.collect()
 
 
 def add_transaction_month(
@@ -143,8 +159,13 @@ def validate_model_columns(
 def build_model_dataset(
     exclude_severe_anomalies: bool = False,
     include_month: bool = True,
+    transaction_start: date | None = None,
+    transaction_end: date | None = None,
 ) -> pl.DataFrame:
-    dataframe = load_processed_dataset()
+    dataframe = load_processed_dataset(
+        transaction_start=transaction_start,
+        transaction_end=transaction_end,
+    )
 
     dataframe = add_transaction_month(dataframe)
     validate_model_temporal_scope(dataframe)

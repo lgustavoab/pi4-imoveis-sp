@@ -28,6 +28,14 @@ class TemporalPartitions:
 
 
 @dataclass(frozen=True)
+class SelectionSplit:
+    x_train: pl.DataFrame
+    y_train: pl.Series
+    x_validation: pl.DataFrame
+    y_validation: pl.Series
+
+
+@dataclass(frozen=True)
 class DatasetSplit:
     x_train: pl.DataFrame
     y_train: pl.Series
@@ -137,6 +145,77 @@ def split_features_target(
     target = dataframe.get_column(TARGET_COLUMN)
 
     return features, target
+
+
+def build_selection_split(
+    include_month: bool = True,
+) -> SelectionSplit:
+    dataframe = build_model_dataset(
+        exclude_severe_anomalies=True,
+        include_month=include_month,
+        transaction_start=SCOPE_START,
+        transaction_end=TEST_START,
+    )
+
+    null_dates = dataframe.filter(pl.col(TRANSACTION_DATE_COLUMN).is_null()).height
+
+    if null_dates:
+        raise ValueError("O dataset de seleção contém datas de transação nulas.")
+
+    outside_selection_scope = dataframe.filter(
+        ~date_range_condition(SCOPE_START, TEST_START)
+    ).height
+
+    if outside_selection_scope:
+        raise ValueError(
+            "O dataset de seleção contém registros fora de janeiro a novembro "
+            f"de {TRANSACTION_YEAR}."
+        )
+
+    train = dataframe.filter(date_range_condition(SCOPE_START, VALIDATION_START))
+    validation = dataframe.filter(date_range_condition(VALIDATION_START, TEST_START))
+
+    if train.height == 0:
+        raise ValueError("O conjunto de treino da seleção está vazio.")
+
+    if validation.height == 0:
+        raise ValueError("O conjunto de validação da seleção está vazio.")
+
+    memberships = pl.sum_horizontal(
+        date_range_condition(SCOPE_START, VALIDATION_START).cast(pl.Int8),
+        date_range_condition(VALIDATION_START, TEST_START).cast(pl.Int8),
+    )
+
+    invalid_memberships = dataframe.filter(memberships != 1).height
+
+    if invalid_memberships:
+        raise ValueError(
+            "Cada registro da seleção deve pertencer a exatamente um conjunto. "
+            f"Registros inválidos: {invalid_memberships:,}."
+        )
+
+    if train.height + validation.height != dataframe.height:
+        raise ValueError("O split de seleção não preservou todos os registros.")
+
+    train_max = train.get_column(TRANSACTION_DATE_COLUMN).max()
+    validation_min = validation.get_column(TRANSACTION_DATE_COLUMN).min()
+
+    if not train_max < validation_min:
+        raise ValueError("Treino e validação não preservam a ordem cronológica.")
+
+    feature_columns = (
+        FEATURE_COLUMNS if include_month else FEATURE_COLUMNS_WITHOUT_MONTH
+    )
+
+    x_train, y_train = split_features_target(train, feature_columns)
+    x_validation, y_validation = split_features_target(validation, feature_columns)
+
+    return SelectionSplit(
+        x_train=x_train,
+        y_train=y_train,
+        x_validation=x_validation,
+        y_validation=y_validation,
+    )
 
 
 def build_temporal_split(

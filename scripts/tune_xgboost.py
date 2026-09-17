@@ -7,7 +7,7 @@ from sklearn.metrics import (
 )
 from xgboost import XGBRegressor
 
-from pi4_imoveis_sp.ml.split import build_temporal_split
+from pi4_imoveis_sp.ml.split import build_selection_split
 from pi4_imoveis_sp.ml.xgboost_model import build_preprocessor
 
 
@@ -21,7 +21,7 @@ def main() -> None:
     print("Dezembro permanece reservado para teste final.")
     print("Feature mes_transacao: removida.")
 
-    split = build_temporal_split(
+    split = build_selection_split(
         include_month=False,
     )
 

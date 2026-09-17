@@ -9,6 +9,7 @@ from pi4_imoveis_sp.ml.dataset import (
     build_model_dataset,
 )
 from pi4_imoveis_sp.ml.split import (
+    build_selection_split,
     build_temporal_partitions,
     build_temporal_split,
 )
@@ -33,6 +34,8 @@ def main() -> None:
     partitions = build_temporal_partitions(dataframe)
 
     split = build_temporal_split()
+
+    selection_split = build_selection_split()
 
     train_rows = split.x_train.height
     validation_rows = split.x_validation.height
@@ -60,7 +63,19 @@ def main() -> None:
     if total != EXPECTED_TOTAL_ROWS:
         raise ValueError(f"Total inesperado: {total:,}")
 
-    print("\n2. INTERVALOS TEMPORAIS")
+    if selection_split.x_train.height != EXPECTED_TRAIN_ROWS:
+        raise ValueError("Treino inesperado no split de seleção.")
+
+    if selection_split.x_validation.height != EXPECTED_VALIDATION_ROWS:
+        raise ValueError("Validação inesperada no split de seleção.")
+
+    print("\n2. SPLIT EXCLUSIVO PARA SELEÇÃO")
+    print("-" * 80)
+    print(f"Treino:    {selection_split.x_train.height:,}")
+    print(f"Validação: {selection_split.x_validation.height:,}")
+    print("Teste:     não materializado")
+
+    print("\n3. INTERVALOS TEMPORAIS")
     print("-" * 80)
 
     for name, partition in (
@@ -82,7 +97,7 @@ def main() -> None:
         if outside_year:
             raise ValueError(f"{name} contém registros fora de {TRANSACTION_YEAR}.")
 
-    print("\n3. FEATURES")
+    print("\n4. FEATURES")
     print("-" * 80)
 
     print(split.x_train.columns)
@@ -98,7 +113,7 @@ def main() -> None:
 
     print("Contrato de features preservado.")
 
-    print("\n4. TARGET")
+    print("\n5. TARGET")
     print("-" * 80)
 
     print(f"y_train:      {len(split.y_train):,}")

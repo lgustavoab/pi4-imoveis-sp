@@ -15,7 +15,7 @@ from pi4_imoveis_sp.ml.dataset import (
     CATEGORICAL_FEATURES,
     NUMERICAL_FEATURES,
 )
-from pi4_imoveis_sp.ml.split import build_temporal_split
+from pi4_imoveis_sp.ml.split import build_selection_split
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ def build_linear_pipeline() -> Pipeline:
 
 
 def run_baselines() -> BaselineResults:
-    split = build_temporal_split()
+    split = build_selection_split()
 
     x_train = split.x_train.to_pandas()
     y_train = split.y_train.to_numpy()
