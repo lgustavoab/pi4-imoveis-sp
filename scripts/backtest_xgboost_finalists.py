@@ -1,4 +1,5 @@
 from datetime import date
+from math import isclose
 from statistics import mean, pstdev
 
 import polars as pl
@@ -23,17 +24,32 @@ from pi4_imoveis_sp.ml.xgboost_model import build_preprocessor
 VALIDATION_MONTHS = (7, 8, 9, 10, 11)
 
 CANDIDATES = {
-    "CANDIDATO A — DEPTH 6": {
-        "max_depth": 6,
-        "learning_rate": 0.05,
-        "n_estimators": 800,
-    },
-    "CANDIDATO B — DEPTH 8": {
+    "CANDIDATO A — DEPTH 8 / 800 ÁRVORES": {
         "max_depth": 8,
         "learning_rate": 0.05,
         "n_estimators": 800,
     },
+    "CANDIDATO B — DEPTH 8 / 500 ÁRVORES": {
+        "max_depth": 8,
+        "learning_rate": 0.05,
+        "n_estimators": 500,
+    },
+    "CANDIDATO C — DEPTH 6 / 800 ÁRVORES": {
+        "max_depth": 6,
+        "learning_rate": 0.05,
+        "n_estimators": 800,
+    },
 }
+
+EXPECTED_WINDOW_ROWS = {
+    7: (30_718, 5_331),
+    8: (36_049, 5_366),
+    9: (41_415, 5_509),
+    10: (46_924, 5_883),
+    11: (52_807, 4_902),
+}
+
+MAE_TIE_ABSOLUTE_TOLERANCE = 0.01
 
 
 def main() -> None:
@@ -48,6 +64,8 @@ def main() -> None:
     dataframe = build_model_dataset(
         exclude_severe_anomalies=True,
         include_month=False,
+        transaction_start=date(TRANSACTION_YEAR, 1, 1),
+        transaction_end=date(TRANSACTION_YEAR, 12, 1),
     )
 
     results: dict[str, list[dict[str, float]]] = {name: [] for name in CANDIDATES}
@@ -78,6 +96,22 @@ def main() -> None:
                 (pl.col(TRANSACTION_DATE_COLUMN) >= validation_start)
                 & (pl.col(TRANSACTION_DATE_COLUMN) < validation_end)
             )
+
+            expected_train_rows, expected_validation_rows = EXPECTED_WINDOW_ROWS[
+                validation_month
+            ]
+
+            if train.height != expected_train_rows:
+                raise ValueError(
+                    f"Treino inesperado para o mês {validation_month:02d}: "
+                    f"{train.height:,}. Esperado: {expected_train_rows:,}."
+                )
+
+            if validation.height != expected_validation_rows:
+                raise ValueError(
+                    f"Validação inesperada para o mês {validation_month:02d}: "
+                    f"{validation.height:,}. Esperado: {expected_validation_rows:,}."
+                )
 
             x_train = train.select(FEATURE_COLUMNS_WITHOUT_MONTH).to_pandas()
 
@@ -139,6 +173,9 @@ def main() -> None:
 
             results[candidate_name].append(
                 {
+                    "month": validation_month,
+                    "train_rows": train.height,
+                    "validation_rows": validation.height,
                     "mae": mae,
                     "rmse": rmse,
                     "r2": r2,
@@ -159,7 +196,24 @@ def main() -> None:
     print("RESUMO DO BACKTEST")
     print("=" * 80)
 
-    summary: dict[str, float] = {}
+    monthly_wins = {name: 0 for name in CANDIDATES}
+
+    for month_index, _ in enumerate(VALIDATION_MONTHS):
+        minimum_monthly_mae = min(
+            candidate_results[month_index]["mae"]
+            for candidate_results in results.values()
+        )
+
+        for candidate_name, candidate_results in results.items():
+            if isclose(
+                candidate_results[month_index]["mae"],
+                minimum_monthly_mae,
+                rel_tol=0.0,
+                abs_tol=MAE_TIE_ABSOLUTE_TOLERANCE,
+            ):
+                monthly_wins[candidate_name] += 1
+
+    summary: dict[str, dict[str, float | int]] = {}
 
     for candidate_name, candidate_results in results.items():
         maes = [result["mae"] for result in candidate_results]
@@ -173,27 +227,55 @@ def main() -> None:
         mean_r2 = mean(r2_scores)
         mae_std = pstdev(maes)
 
-        summary[candidate_name] = mean_mae
+        summary[candidate_name] = {
+            "mean_mae": mean_mae,
+            "mae_std": mae_std,
+            "minimum_mae": min(maes),
+            "maximum_mae": max(maes),
+            "mean_rmse": mean_rmse,
+            "mean_r2": mean_r2,
+            "monthly_wins": monthly_wins[candidate_name],
+        }
 
         print(f"\n{candidate_name}")
         print("-" * 80)
 
         print(f"MAE médio:       R$ {mean_mae:,.2f}")
         print(f"Desvio MAE:      R$ {mae_std:,.2f}")
+        print(f"Menor MAE:       R$ {min(maes):,.2f}")
+        print(f"Maior MAE:       R$ {max(maes):,.2f}")
         print(f"RMSE médio:      R$ {mean_rmse:,.2f}")
         print(f"R² médio:        {mean_r2:.4f}")
+        print(f"Vitórias mensais: {monthly_wins[candidate_name]}")
 
-    winner = min(
+    ranking = sorted(
         summary,
-        key=summary.get,
+        key=lambda candidate_name: summary[candidate_name]["mean_mae"],
     )
+
+    winner = ranking[0]
+    runner_up = ranking[1]
+
+    if isclose(
+        summary[winner]["mean_mae"],
+        summary[runner_up]["mean_mae"],
+        rel_tol=0.0,
+        abs_tol=MAE_TIE_ABSOLUTE_TOLERANCE,
+    ):
+        print("\n" + "=" * 80)
+        print("EMPATE EFETIVO NO MAE MÉDIO")
+        print("=" * 80)
+        print(winner)
+        print(runner_up)
+        print("Nenhum modelo foi selecionado automaticamente.")
+        return
 
     print("\n" + "=" * 80)
     print("VENCEDOR — MENOR MAE MÉDIO")
     print("=" * 80)
 
     print(winner)
-    print(f"MAE médio: R$ {summary[winner]:,.2f}")
+    print(f"MAE médio: R$ {summary[winner]['mean_mae']:,.2f}")
 
 
 if __name__ == "__main__":
