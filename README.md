@@ -46,7 +46,10 @@ Arquivo original utilizado:
 GUIAS DE ITBI PAGAS (28012026) XLS.xlsx
 ```
 
-O arquivo contém registros mensais de janeiro a dezembro de 2025.
+O arquivo reúne guias de ITBI pagas em 2025. O ano de pagamento da guia não
+implica, por si só, que a respectiva **Data de Transação** também pertença a
+2025. Para manter o escopo temporal do estudo, o pipeline final restringe essa
+coluna ao ano de 2025 antes da modelagem.
 
 Por questões de tamanho e organização do repositório, o arquivo bruto não é versionado no Git.
 
@@ -60,11 +63,11 @@ data/raw/itbi_2025.xlsx
 
 ## 📊 Base original
 
-A base completa de 2025 contém:
+O arquivo original de guias pagas em 2025 contém:
 
 **230.525 registros**
 
-distribuídos entre os doze meses do ano.
+distribuídos entre as planilhas mensais da fonte.
 
 Entre as informações disponibilizadas estão:
 
@@ -85,28 +88,36 @@ Entre as informações disponibilizadas estão:
 
 ## 🎯 Recorte utilizado
 
-O projeto foi direcionado principalmente para transações com as seguintes características:
+O funil final aplica sequencialmente os seguintes critérios:
 
-- **Natureza da transação:** Compra e venda;
-- **Uso IPTU:** 20 — Apartamento em condomínio;
-- **Proporção transmitida:** 100%.
+| Etapa | Registros |
+|---|---:|
+| Base original — guias pagas em 2025 | 230.525 |
+| Natureza da transação: compra e venda | 205.844 |
+| Compra e venda + Uso IPTU 20 — apartamento em condomínio | 68.486 |
+| Transmissão integral — proporção transmitida de 100% | 64.951 |
+| Data de Transação pertencente a 2025 | 64.227 |
+| Após exclusão da união das anomalias econômicas severas | **63.140** |
 
-Esse recorte resultou inicialmente em:
-
-**64.951 registros**
-
-Durante a análise de qualidade foram identificadas transações com fortes indícios de inconsistência econômica.
-
-Foram utilizados dois critérios principais para sinalizar anomalias severas:
+Durante a análise de qualidade foram utilizados dois critérios para sinalizar
+anomalias econômicas severas:
 
 - valor por m² inferior a **R$ 100**;
-- valor de transação inferior a **10% do Valor Venal de Referência proporcional**.
+- razão entre valor de transação e VVR proporcional inferior a **0,10**.
 
-Após a exclusão desses registros do conjunto destinado à modelagem, a base principal ficou com:
+No recorte com Data de Transação em 2025, foram encontrados:
 
-**63.807 registros**
+| Flag de qualidade | Registros |
+|---|---:|
+| `valor_m2 < 100` | 1.018 |
+| `razao_transacao_vvr < 0,10` | 301 |
+| Interseção das duas flags | 232 |
+| União das duas flags | 1.087 |
 
-A base completa do recorte foi preservada para fins de análise.
+A exclusão utiliza a união dessas duas flags. VVR proporcional igual a zero não
+constitui uma regra adicional de exclusão. A base processada com 64.227 registros
+é preservada; o conjunto de Machine Learning utiliza os 63.140 registros
+economicamente válidos.
 
 ---
 
@@ -121,6 +132,7 @@ Portanto, a previsão representa uma estimativa do **valor declarado na transaç
 Ela não representa necessariamente:
 
 - valor venal;
+- preço de mercado;
 - preço de anúncio;
 - avaliação bancária;
 - laudo imobiliário profissional.
@@ -129,15 +141,27 @@ Ela não representa necessariamente:
 
 ## 🧩 Variáveis utilizadas pelo modelo
 
-O modelo final utiliza cinco variáveis:
+O dataset final de Machine Learning possui **63.140 registros**. O modelo utiliza
+cinco variáveis, nesta ordem:
 
 | Variável | Descrição |
 |---|---|
-| Área construída | Área construída do imóvel em metros quadrados |
-| CEP4 | Quatro primeiros dígitos do CEP, utilizados como aproximação da localização |
-| Padrão IPTU | Código do padrão construtivo cadastrado no IPTU |
-| Idade do imóvel | Calculada a partir do ano de conclusão da construção |
-| Fração ideal | Participação da unidade no terreno e nas áreas comuns do condomínio |
+| `Área Construída (m2)` | Área construída do imóvel em metros quadrados |
+| `cep4` | Quatro primeiros dígitos do CEP, utilizados como aproximação da localização |
+| `Padrão (IPTU)` | Código do padrão construtivo cadastrado no IPTU |
+| `idade_imovel` | Idade calculada a partir do ano de conclusão da construção |
+| `Fração Ideal` | Participação da unidade no terreno e nas áreas comuns do condomínio |
+
+Variáveis categóricas:
+
+- `cep4`;
+- `Padrão (IPTU)`.
+
+Variáveis numéricas:
+
+- `Área Construída (m2)`;
+- `idade_imovel`;
+- `Fração Ideal`.
 
 A idade do imóvel é calculada como:
 
@@ -154,22 +178,28 @@ CEP: 04303-000
 CEP4: 0430
 ```
 
+A variável `mes_transacao` foi avaliada experimentalmente, mas não integra o
+contrato final do modelo.
+
 ---
 
 ## 🔒 Prevenção de vazamento de dados
 
-Algumas variáveis presentes na base oficial foram deliberadamente excluídas da modelagem por apresentarem risco de **data leakage** ou por estarem diretamente relacionadas ao cálculo tributário da própria transação.
+Algumas variáveis presentes na base oficial foram deliberadamente excluídas da
+modelagem por apresentarem risco de **data leakage**, por derivarem do próprio
+alvo ou por estarem relacionadas ao cálculo tributário da transação.
 
 Entre elas:
 
-- Valor Venal de Referência;
-- Valor Venal de Referência proporcional;
-- Base de Cálculo adotada;
-- Valor Financiado;
-- Valor por m²;
-- Razão entre valor de transação e VVR.
+- VVR;
+- VVR proporcional;
+- Base de Cálculo;
+- `valor_m2`;
+- `razao_transacao_vvr`;
+- Valor Financiado.
 
-O objetivo é evitar que o modelo utilize informações que revelem direta ou indiretamente o valor que deveria prever.
+Esses campos não fazem parte das features finais. A exclusão protege a validade
+da avaliação preditiva; ela não sustenta afirmações causais sobre as variáveis.
 
 ---
 
@@ -177,22 +207,35 @@ O objetivo é evitar que o modelo utilize informações que revelem direta ou in
 
 Como os registros possuem uma dimensão temporal, foi utilizada uma estratégia de validação baseada no tempo, evitando uma divisão aleatória simples.
 
-Durante a etapa inicial de desenvolvimento:
+### Seleção do modelo
 
-```text
-Treinamento: janeiro a outubro de 2025
-Validação: novembro de 2025
-Teste final: dezembro de 2025
-```
+| Partição | Janela definida | Registros |
+|---|---|---:|
+| Treino | 01/01/2025 a 31/10/2025 | 52.807 |
+| Validação | 01/11/2025 a 30/11/2025 | 4.902 |
+| Teste final reservado | 01/12/2025 a 31/12/2025 | 5.431 |
 
-Após a escolha da configuração final, a avaliação oficial foi realizada com:
+A arquitetura utiliza `build_selection_split()`, que consulta e materializa
+somente treino e validação nos fluxos de comparação e tuning. Os registros e os
+targets de dezembro não são materializados nesses fluxos.
 
-```text
-Treinamento: janeiro a novembro de 2025
-Teste independente: dezembro de 2025
-```
+Dezembro não participou:
 
-O conjunto de dezembro permaneceu separado durante a seleção do modelo e não foi utilizado para ajuste de hiperparâmetros.
+- do tuning;
+- da seleção de features;
+- da escolha dos hiperparâmetros.
+
+### Avaliação final
+
+Depois do congelamento do modelo, a avaliação oficial utilizou:
+
+| Partição | Período | Registros |
+|---|---|---:|
+| Treino final | Janeiro a novembro de 2025 | 57.709 |
+| Teste independente | Dezembro de 2025 | 5.431 |
+
+O modelo foi congelado antes da abertura do teste independente. A avaliação de
+dezembro foi realizada somente após o encerramento da seleção.
 
 ---
 
@@ -205,45 +248,97 @@ Foram comparados diferentes modelos de regressão:
 - Random Forest;
 - XGBoost.
 
-O XGBoost apresentou o melhor desempenho geral durante a etapa de seleção.
+### Comparação na validação de novembro de 2025
+
+| Modelo | MAE | RMSE | R² |
+|---|---:|---:|---:|
+| Dummy Regressor | R$ 445.690,03 | R$ 1.359.439,91 | -0,0464 |
+| Regressão Linear | R$ 312.417,38 | R$ 859.369,42 | 0,5818 |
+| Random Forest | R$ 185.435,77 | R$ 658.238,14 | 0,7547 |
+| XGBoost inicial com mês | R$ 184.440,95 | R$ 481.673,15 | 0,8686 |
+| XGBoost inicial sem mês | R$ 181.962,60 | R$ 463.993,37 | 0,8781 |
+| XGBoost ajustado | **R$ 170.133,00** | **R$ 462.107,92** | **0,8791** |
+
+Esses resultados pertencem exclusivamente à **validação de novembro de 2025**.
+Eles não são as métricas do teste final de dezembro.
+
+### Experimento com e sem mês da transação
 
 Durante os experimentos também foi avaliado o uso do **mês da transação** como variável preditora.
 
-O desempenho foi melhor sem essa variável, portanto ela foi retirada da configuração final.
+| Configuração inicial | MAE | RMSE | R² |
+|---|---:|---:|---:|
+| Com `mes_transacao` | R$ 184.440,95 | R$ 481.673,15 | 0,8686 |
+| Sem `mes_transacao` | R$ 181.962,60 | R$ 463.993,37 | 0,8781 |
+
+Diferença da versão sem mês menos a versão com mês:
+
+- MAE: **-R$ 2.478,35**;
+- RMSE: **-R$ 17.679,78**;
+- R²: **+0,0095**.
+
+A versão sem mês apresentou melhor desempenho nas três métricas dessa validação.
+Por esse motivo, `mes_transacao` foi removida do contrato final.
 
 ### Configuração selecionada
 
-Principais hiperparâmetros:
-
-```text
-max_depth = 8
-learning_rate = 0.05
-n_estimators = 800
-subsample = 0.8
-colsample_bytree = 0.8
-```
-
-A configuração final também utiliza:
+O modelo selecionado é um `XGBRegressor`. O critério principal de seleção foi o
+**MAE**.
 
 ```text
 objective = reg:squarederror
+max_depth = 8
+learning_rate = 0.05
+n_estimators = 800
 min_child_weight = 1
-reg_lambda = 1
+subsample = 0.8
+colsample_bytree = 0.8
+reg_lambda = 1.0
 tree_method = hist
 random_state = 42
+n_jobs = -1
 ```
+
+### Backtest temporal dos finalistas
+
+Três candidatos foram comparados em cinco janelas expansivas, com validações
+mensais de julho a novembro de 2025:
+
+- **A:** profundidade 8 e 800 árvores;
+- **B:** profundidade 8 e 500 árvores;
+- **C:** profundidade 6 e 800 árvores.
+
+Todos utilizaram `learning_rate = 0.05` e as mesmas demais definições do pipeline.
+
+| Candidato | MAE médio | Desvio do MAE | RMSE médio | R² médio | Vitórias por MAE |
+|---|---:|---:|---:|---:|---:|
+| A — depth 8 / 800 | **R$ 176.534,01** | R$ 6.196,59 | R$ 589.959,80 | 0,7884 | **5/5** |
+| B — depth 8 / 500 | R$ 181.243,01 | R$ 6.974,05 | R$ 589.726,03 | 0,7894 | 0/5 |
+| C — depth 6 / 800 | R$ 182.209,50 | R$ 6.916,13 | **R$ 586.767,62** | **0,7910** | 0/5 |
+
+O candidato A foi escolhido pelo menor MAE médio e venceu por MAE nas cinco
+janelas. O candidato C obteve RMSE e R² médios ligeiramente melhores; portanto,
+A não foi superior em todas as métricas. A decisão seguiu o critério de MAE
+definido previamente.
 
 ---
 
 ## 📈 Avaliação final
 
-A avaliação temporal independente foi realizada utilizando as transações de **dezembro de 2025**.
+A avaliação temporal independente foi realizada depois do congelamento do
+modelo, com 57.709 registros de janeiro a novembro no treino e 5.431 registros
+de dezembro de 2025 no teste.
 
 | Métrica | Resultado |
 |---|---:|
-| MAE | R$ 228.857,12 |
-| RMSE | R$ 1.044.652,29 |
-| R² | 0,5890 |
+| MAE | R$ 231.947,92 |
+| RMSE | R$ 1.091.963,08 |
+| R² | 0,5730 |
+| Mediana do erro absoluto | R$ 84.607,78 |
+
+Esses são os resultados oficiais do teste independente de dezembro. Eles
+pertencem ao modelo de avaliação e não foram substituídos por métricas do modelo
+de produção treinado posteriormente.
 
 ### MAE
 
@@ -267,41 +362,57 @@ Valores mais próximos de 1 representam maior capacidade explicativa.
 
 A análise do conjunto temporal independente mostrou que o comportamento do modelo varia de acordo com a faixa de valor dos imóveis.
 
-A mediana do erro absoluto em dezembro ficou em aproximadamente:
+- a mediana do erro absoluto foi de **R$ 84.607,78**;
+- **53,31%** das previsões ficaram acima do valor real;
+- na faixa de R$ 300 mil a R$ 500 mil, o MAE foi de **R$ 89.352,55**;
+- os 76 imóveis com valor declarado a partir de R$ 5 milhões, equivalentes a
+  1,40% do teste, apresentaram MAE de **R$ 3.585.343,55**;
+- os maiores erros observados concentraram-se em imóveis com áreas
+  excepcionalmente grandes.
 
-**R$ 83 mil**
-
-Isso significa que metade das previsões apresentou erro absoluto inferior a aproximadamente esse valor.
-
-Os maiores erros ficaram concentrados principalmente nos imóveis de valor muito elevado.
-
-Imóveis acima de:
-
-**R$ 5 milhões**
-
-apresentaram erros consideravelmente maiores que as faixas de valores mais comuns da base.
-
-Por esse motivo, estimativas nessa faixa devem ser interpretadas com maior cautela.
+Essas associações descrevem o teste de dezembro e não demonstram causalidade.
+O MAE é uma média do conjunto avaliado, não uma margem de erro individual.
 
 ---
 
 ## 🧠 Importância das variáveis
 
-Foi utilizada **Permutation Importance** para analisar a contribuição preditiva das variáveis.
+Foi utilizada `sklearn.inspection.permutation_importance` no teste independente,
+com `scoring="neg_mean_absolute_error"`, `n_repeats=10` e `random_state=42`.
 
-A ordem observada foi:
+| Variável | Aumento médio do MAE | Desvio |
+|---|---:|---:|
+| Área Construída | R$ 460.785,14 | ± R$ 6.331,58 |
+| CEP4 | R$ 124.343,02 | ± R$ 3.620,19 |
+| `idade_imovel` | R$ 82.576,24 | ± R$ 5.289,14 |
+| Padrão IPTU | R$ 23.649,95 | ± R$ 1.499,60 |
+| Fração Ideal | R$ 15.721,82 | ± R$ 2.524,52 |
 
-1. Área construída;
-2. CEP4;
-3. Idade do imóvel;
-4. Padrão IPTU;
-5. Fração ideal.
+A técnica mede quanto o MAE piora quando os valores de uma variável são
+embaralhados. **Importância preditiva não representa causalidade.**
 
-A técnica avalia quanto o desempenho do modelo piora quando os valores de uma variável são embaralhados.
+---
 
-Quanto maior a perda de desempenho, maior sua importância para as previsões do modelo.
+## 🏭 Modelo de avaliação e modelo de produção
 
-Esses resultados representam **importância preditiva** e não devem ser interpretados como relações causais.
+Os dois modelos possuem a mesma arquitetura, preprocessing, features e
+hiperparâmetros, mas cumprem papéis diferentes:
+
+| Modelo | Treinamento | Avaliação | Finalidade |
+|---|---:|---:|---|
+| Modelo de avaliação | 57.709 registros de jan–nov/2025 | 5.431 registros de dez/2025 | Produzir as métricas oficiais do teste independente |
+| Modelo de produção | 63.140 registros válidos de 2025 | Sem holdout interno para novas métricas oficiais | Realizar inferências na aplicação |
+
+O modelo de produção foi treinado somente depois do encerramento da avaliação.
+Seus artefatos são:
+
+```text
+artifacts/apartment_price_model.joblib
+artifacts/model_metadata.json
+```
+
+O metadata registra separadamente os resultados oficiais da avaliação e o
+contexto de treinamento do artefato de produção.
 
 ---
 
@@ -351,12 +462,10 @@ Os indicadores e gráficos são atualizados conforme os filtros selecionados.
 
 A página dedicada ao modelo apresenta:
 
-- MAE;
-- RMSE;
-- R²;
-- explicação das métricas;
-- comparação entre os modelos avaliados;
-- importância das variáveis;
+- métricas finais do teste independente;
+- comparação dos modelos na validação de novembro;
+- análise dos erros;
+- permutation importance;
 - configuração final do XGBoost;
 - limitações observadas.
 
@@ -366,19 +475,20 @@ As métricas principais correspondem à avaliação temporal independente realiz
 
 ### 🏠 Estimador
 
-O Estimador permite realizar uma nova previsão informando:
+O Estimador produz uma estimativa do **valor de transação declarado pelo
+contribuinte** a partir das seguintes entradas:
 
-- área construída;
+- Área Construída;
 - CEP;
-- ano de conclusão da construção;
-- padrão construtivo do IPTU;
-- fração ideal.
+- Padrão IPTU;
+- ano de conclusão da construção — ACC;
+- Fração Ideal.
 
 O sistema deriva automaticamente:
 
 ```text
 CEP → CEP4
-Ano de conclusão → Idade do imóvel
+ACC → idade_imovel
 ```
 
 O modelo então gera:
@@ -388,7 +498,8 @@ O modelo então gera:
 
 Também são apresentados os dados utilizados na previsão e avisos relacionados às limitações do modelo.
 
-A estimativa é estatística e não substitui uma avaliação imobiliária profissional.
+A estimativa é estatística, refere-se ao valor declarado e não substitui uma
+avaliação imobiliária profissional.
 
 ---
 
@@ -553,6 +664,11 @@ A separação temporal utilizada durante o desenvolvimento pode ser validada com
 uv run python scripts/validate_ml_split.py
 ```
 
+O validador verifica tanto o split estrutural completo quanto o contrato de
+`build_selection_split()`. Nos fluxos de seleção, essa API materializa somente
+treino de janeiro a outubro e validação de novembro; dezembro permanece fora
+desses objetos.
+
 ---
 
 ### 4. Comparação dos modelos
@@ -693,6 +809,9 @@ Atualmente são testados:
 - filtros da Visão Geral;
 - faixas de preço;
 - tratamento das anomalias econômicas;
+- restrição da Data de Transação ao ano de 2025;
+- isolamento temporal entre seleção, validação e teste;
+- metadados e configuração do modelo de produção;
 - normalização de CEP;
 - formatação de CEP;
 - opções de padrão utilizadas pelo Estimador.
@@ -705,7 +824,7 @@ uv run pytest -v
 
 Estado atual:
 
-**35 testes aprovados**
+**50 testes aprovados**
 
 ---
 
@@ -743,15 +862,22 @@ uv run ruff format --check .
 
 Algumas limitações devem ser consideradas:
 
-- o modelo utiliza apenas transações registradas em 2025;
+- a fonte reúne guias de ITBI pagas em 2025;
+- a modelagem restringe a Data de Transação ao ano de 2025;
+- o alvo é o valor de transação declarado pelo contribuinte e não equivale
+  necessariamente ao preço de mercado;
 - o CEP4 é uma aproximação da localização e não representa exatamente bairros ou microrregiões imobiliárias;
 - algumas informações cadastrais apresentam inconsistências na base original;
-- imóveis de alto valor apresentaram erros maiores;
+- o desempenho foi pior na cauda de imóveis de alto valor do teste;
 - alguns padrões menos frequentes apresentaram desempenho inferior;
-- o modelo não utiliza características como dormitórios, vagas, andar, estado de conservação ou infraestrutura do condomínio;
+- o modelo não dispõe de dormitórios, vagas dedicadas, andar, estado de
+  conservação, vista ou características internas do imóvel;
 - a qualidade da previsão depende das características informadas pelo usuário;
-- as métricas globais não representam uma margem de erro fixa para cada imóvel;
-- o valor estimado representa o valor de transação declarado e não necessariamente o preço de mercado;
+- o MAE e as demais métricas globais não representam uma margem de erro fixa
+  para cada imóvel;
+- o resultado de dezembro de 2025 não garante o mesmo desempenho em outros
+  períodos;
+- permutation importance mede associação preditiva no modelo e não causalidade;
 - os resultados representam estimativas estatísticas.
 
 ---
@@ -777,16 +903,19 @@ O sistema não substitui um laudo ou avaliação imobiliária profissional.
 | Etapa | Status |
 |---|---|
 | Coleta e exploração dos dados | ✅ Concluída |
-| Tratamento dos dados | ✅ Concluída |
+| Pipeline de tratamento dos dados | ✅ Concluído |
 | Engenharia de atributos | ✅ Concluída |
 | Modelagem | ✅ Concluída |
-| Avaliação temporal | ✅ Concluída |
-| Modelo de produção | ✅ Concluída |
+| Avaliação temporal final | ✅ Concluída |
+| Modelo de produção | ✅ Gerado e validado |
 | Interpretação | ✅ Concluída |
-| Dashboard | ✅ Concluída |
-| Estimador | ✅ Concluída |
+| Aplicação — dashboard e estimador | ✅ Concluída |
 | Testes automatizados | ✅ Concluída |
-| README e documentação técnica | ✅ Concluída |
+| Documentação técnica | 🔄 Em finalização |
+
+Esse status se refere ao software e ao pipeline técnico. O Relatório Parcial e o
+Relatório Final são etapas acadêmicas externas ao repositório e não são tratados
+como concluídos por esta tabela.
 
 ---
 
