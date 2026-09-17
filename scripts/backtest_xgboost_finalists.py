@@ -1,5 +1,7 @@
+from datetime import date
 from statistics import mean, pstdev
 
+import polars as pl
 from sklearn.metrics import (
     mean_absolute_error,
     r2_score,
@@ -7,6 +9,10 @@ from sklearn.metrics import (
 )
 from xgboost import XGBRegressor
 
+from pi4_imoveis_sp.data.cleaning import (
+    TRANSACTION_DATE_COLUMN,
+    TRANSACTION_YEAR,
+)
 from pi4_imoveis_sp.ml.dataset import (
     FEATURE_COLUMNS_WITHOUT_MONTH,
     TARGET_COLUMN,
@@ -37,6 +43,7 @@ def main() -> None:
 
     print("\nDezembro permanece reservado para o teste final.")
     print("Feature mes_transacao não é fornecida ao modelo.")
+    print("Data de Transação restrita ao ano de 2025.")
 
     dataframe = build_model_dataset(
         exclude_severe_anomalies=True,
@@ -51,10 +58,25 @@ def main() -> None:
         print("=" * 80)
 
         for validation_month in VALIDATION_MONTHS:
-            train = dataframe.filter(dataframe["mes_transacao"] < validation_month)
+            validation_start = date(
+                TRANSACTION_YEAR,
+                validation_month,
+                1,
+            )
+            validation_end = date(
+                TRANSACTION_YEAR,
+                validation_month + 1,
+                1,
+            )
+
+            train = dataframe.filter(
+                (pl.col(TRANSACTION_DATE_COLUMN) >= date(TRANSACTION_YEAR, 1, 1))
+                & (pl.col(TRANSACTION_DATE_COLUMN) < validation_start)
+            )
 
             validation = dataframe.filter(
-                dataframe["mes_transacao"] == validation_month
+                (pl.col(TRANSACTION_DATE_COLUMN) >= validation_start)
+                & (pl.col(TRANSACTION_DATE_COLUMN) < validation_end)
             )
 
             x_train = train.select(FEATURE_COLUMNS_WITHOUT_MONTH).to_pandas()

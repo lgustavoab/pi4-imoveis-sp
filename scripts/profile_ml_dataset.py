@@ -1,5 +1,9 @@
 import polars as pl
 
+from pi4_imoveis_sp.data.cleaning import (
+    TRANSACTION_DATE_COLUMN,
+    TRANSACTION_YEAR,
+)
 from pi4_imoveis_sp.ml.dataset import build_model_dataset
 
 
@@ -7,6 +11,7 @@ def main() -> None:
     print("=" * 80)
     print("PERFIL DO DATASET DE MACHINE LEARNING")
     print("=" * 80)
+    print("\nData de Transação restrita ao ano de 2025.")
 
     full_dataset = build_model_dataset(exclude_severe_anomalies=False)
 
@@ -22,6 +27,17 @@ def main() -> None:
     removed = full_dataset.height - clean_dataset.height
 
     print(f"Registros removidos: {removed:,}")
+
+    outside_year = clean_dataset.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).dt.year() != TRANSACTION_YEAR
+    ).height
+
+    minimum_date = clean_dataset.get_column(TRANSACTION_DATE_COLUMN).min()
+    maximum_date = clean_dataset.get_column(TRANSACTION_DATE_COLUMN).max()
+
+    print(f"Data mínima: {minimum_date}")
+    print(f"Data máxima: {maximum_date}")
+    print(f"Registros fora de {TRANSACTION_YEAR}: {outside_year:,}")
 
     print("\n2. DISTRIBUIÇÃO MENSAL — DATASET PRINCIPAL")
     print("-" * 80)

@@ -1,16 +1,36 @@
-from pi4_imoveis_sp.ml.dataset import FEATURE_COLUMNS
-from pi4_imoveis_sp.ml.split import build_temporal_split
+import polars as pl
 
-EXPECTED_TRAIN_ROWS = 52_911
-EXPECTED_VALIDATION_ROWS = 4_930
-EXPECTED_TEST_ROWS = 5_966
-EXPECTED_TOTAL_ROWS = 63_807
+from pi4_imoveis_sp.data.cleaning import (
+    TRANSACTION_DATE_COLUMN,
+    TRANSACTION_YEAR,
+)
+from pi4_imoveis_sp.ml.dataset import (
+    FEATURE_COLUMNS,
+    build_model_dataset,
+)
+from pi4_imoveis_sp.ml.split import (
+    build_temporal_partitions,
+    build_temporal_split,
+)
+
+EXPECTED_TRAIN_ROWS = 52_807
+EXPECTED_VALIDATION_ROWS = 4_902
+EXPECTED_TEST_ROWS = 5_431
+EXPECTED_TOTAL_ROWS = 63_140
 
 
 def main() -> None:
     print("=" * 80)
     print("VALIDAÇÃO DO SPLIT TEMPORAL")
     print("=" * 80)
+    print("\nData de Transação restrita ao ano de 2025.")
+
+    dataframe = build_model_dataset(
+        exclude_severe_anomalies=True,
+        include_month=True,
+    )
+
+    partitions = build_temporal_partitions(dataframe)
 
     split = build_temporal_split()
 
@@ -40,7 +60,29 @@ def main() -> None:
     if total != EXPECTED_TOTAL_ROWS:
         raise ValueError(f"Total inesperado: {total:,}")
 
-    print("\n2. FEATURES")
+    print("\n2. INTERVALOS TEMPORAIS")
+    print("-" * 80)
+
+    for name, partition in (
+        ("Treino", partitions.train),
+        ("Validação", partitions.validation),
+        ("Teste", partitions.test),
+    ):
+        minimum_date = partition.get_column(TRANSACTION_DATE_COLUMN).min()
+        maximum_date = partition.get_column(TRANSACTION_DATE_COLUMN).max()
+        outside_year = partition.filter(
+            pl.col(TRANSACTION_DATE_COLUMN).dt.year() != TRANSACTION_YEAR
+        ).height
+
+        print(
+            f"{name}: {minimum_date} a {maximum_date} "
+            f"| fora de {TRANSACTION_YEAR}: {outside_year:,}"
+        )
+
+        if outside_year:
+            raise ValueError(f"{name} contém registros fora de {TRANSACTION_YEAR}.")
+
+    print("\n3. FEATURES")
     print("-" * 80)
 
     print(split.x_train.columns)
@@ -56,7 +98,7 @@ def main() -> None:
 
     print("Contrato de features preservado.")
 
-    print("\n3. TARGET")
+    print("\n4. TARGET")
     print("-" * 80)
 
     print(f"y_train:      {len(split.y_train):,}")

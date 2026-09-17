@@ -12,6 +12,7 @@ def main() -> None:
 
     print(f"\nOrigem: {INTERIM_FILE}")
     print(f"Destino: {PROCESSED_FILE}")
+    print("Escopo: Data de Transação restrita ao ano de 2025.")
 
     dataframe = run_cleaning()
 

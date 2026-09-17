@@ -3,6 +3,8 @@ import polars as pl
 from pi4_imoveis_sp.data.cleaning import (
     AREA_COLUMN,
     PROCESSED_FILE,
+    TRANSACTION_DATE_COLUMN,
+    TRANSACTION_YEAR,
     VALUE_COLUMN,
 )
 
@@ -72,8 +74,32 @@ def add_transaction_month(
         raise ValueError("A coluna 'Data de Transação' não está presente no dataset.")
 
     return dataframe.with_columns(
-        pl.col("Data de Transação").dt.month().cast(pl.Int8).alias("mes_transacao")
+        pl.col(TRANSACTION_DATE_COLUMN).dt.month().cast(pl.Int8).alias("mes_transacao")
     )
+
+
+def validate_model_temporal_scope(
+    dataframe: pl.DataFrame,
+) -> None:
+    if TRANSACTION_DATE_COLUMN not in dataframe.columns:
+        raise ValueError(
+            f"A coluna {TRANSACTION_DATE_COLUMN!r} não está presente no dataset."
+        )
+
+    null_dates = dataframe.filter(pl.col(TRANSACTION_DATE_COLUMN).is_null()).height
+
+    if null_dates:
+        raise ValueError("O dataset de ML contém datas de transação nulas.")
+
+    outside_scope = dataframe.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).dt.year() != TRANSACTION_YEAR
+    ).height
+
+    if outside_scope:
+        raise ValueError(
+            f"O dataset de ML contém {outside_scope} registros fora de "
+            f"{TRANSACTION_YEAR}."
+        )
 
 
 def validate_model_columns(
@@ -121,6 +147,7 @@ def build_model_dataset(
     dataframe = load_processed_dataset()
 
     dataframe = add_transaction_month(dataframe)
+    validate_model_temporal_scope(dataframe)
 
     feature_columns = (
         FEATURE_COLUMNS if include_month else FEATURE_COLUMNS_WITHOUT_MONTH
@@ -141,6 +168,7 @@ def build_model_dataset(
         *feature_columns,
         TARGET_COLUMN,
         *QUALITY_FLAG_COLUMNS,
+        TRANSACTION_DATE_COLUMN,
     )
 
     if "mes_transacao" not in selected_columns:

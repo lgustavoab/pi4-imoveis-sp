@@ -4,22 +4,29 @@ from pi4_imoveis_sp.data.cleaning import (
     ACC_COLUMN,
     APARTMENT_USE_CODE,
     AREA_COLUMN,
+    EXPECTED_PROCESSED_ROWS,
     FULL_TRANSFER_PERCENTAGE,
     PROCESSED_FILE,
     PURCHASE_AND_SALE,
+    TRANSACTION_DATE_COLUMN,
+    TRANSACTION_YEAR,
     VALUE_COLUMN,
 )
 
-EXPECTED_ROWS = 64_951
+EXPECTED_ROWS = EXPECTED_PROCESSED_ROWS
 EXPECTED_COLUMNS = 37
-EXPECTED_LOW_VALUE_M2 = 1_074
-EXPECTED_LOW_TRANSACTION_VVR = 302
+EXPECTED_LOW_VALUE_M2 = 1_018
+EXPECTED_LOW_TRANSACTION_VVR = 301
+EXPECTED_BOTH_FLAGS = 232
+EXPECTED_FLAG_UNION = 1_087
+EXPECTED_VALID_ROWS = 63_140
 
 
 def main() -> None:
     print("=" * 80)
     print("VALIDAÇÃO DO DATASET PROCESSADO — ITBI 2025")
     print("=" * 80)
+    print("\nData de Transação restrita ao ano de 2025.")
 
     if not PROCESSED_FILE.exists():
         raise FileNotFoundError(f"Dataset processado não encontrado: {PROCESSED_FILE}")
@@ -60,12 +67,36 @@ def main() -> None:
         (pl.col("Proporção Transmitida (%)") - FULL_TRANSFER_PERCENTAGE).abs() >= 1e-9
     ).height
 
+    null_transaction_dates = dataframe.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).is_null()
+    ).height
+
+    outside_transaction_year = dataframe.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).dt.year() != TRANSACTION_YEAR
+    ).height
+
+    minimum_date = dataframe.get_column(TRANSACTION_DATE_COLUMN).min()
+    maximum_date = dataframe.get_column(TRANSACTION_DATE_COLUMN).max()
+
     print(f"Natureza inválida: {invalid_nature:,}")
     print(f"Uso IPTU inválido: {invalid_use:,}")
     print(f"Proporção transmitida inválida: {invalid_transfer:,}")
+    print(f"Datas de transação nulas: {null_transaction_dates:,}")
+    print(f"Datas fora de {TRANSACTION_YEAR}: {outside_transaction_year:,}")
+    print(f"Data mínima: {minimum_date}")
+    print(f"Data máxima: {maximum_date}")
 
-    if invalid_nature or invalid_use or invalid_transfer:
+    if (
+        invalid_nature
+        or invalid_use
+        or invalid_transfer
+        or null_transaction_dates
+        or outside_transaction_year
+    ):
         raise ValueError("O dataset contém registros fora do escopo definido.")
+
+    if minimum_date.year != TRANSACTION_YEAR or maximum_date.year != TRANSACTION_YEAR:
+        raise ValueError("Os limites temporais não pertencem ao ano de 2025.")
 
     print("\n3. FEATURES DERIVADAS")
     print("-" * 80)
@@ -122,7 +153,7 @@ def main() -> None:
     ).height
 
     invalid_acc = dataframe.filter(
-        pl.col(ACC_COLUMN).is_null() | (pl.col(ACC_COLUMN) > 2025)
+        pl.col(ACC_COLUMN).is_null() | (pl.col(ACC_COLUMN) > TRANSACTION_YEAR)
     ).height
 
     invalid_age = dataframe.filter(
@@ -155,15 +186,37 @@ def main() -> None:
         pl.col("flag_transacao_muito_abaixo_vvr")
     ).height
 
+    both_flags = dataframe.filter(
+        pl.col("flag_valor_m2_muito_baixo") & pl.col("flag_transacao_muito_abaixo_vvr")
+    ).height
+
+    flag_union = dataframe.filter(
+        pl.col("flag_valor_m2_muito_baixo") | pl.col("flag_transacao_muito_abaixo_vvr")
+    ).height
+
+    valid_rows = dataframe.height - flag_union
+
     print(f"Valor abaixo de R$ 100/m²: {low_value_m2:,}")
 
     print(f"Transação abaixo de 10% do VVR: {low_transaction_vvr:,}")
+    print(f"Interseção das flags: {both_flags:,}")
+    print(f"União das flags: {flag_union:,}")
+    print(f"Registros economicamente válidos: {valid_rows:,}")
 
     if low_value_m2 != EXPECTED_LOW_VALUE_M2:
         raise ValueError("Quantidade inesperada para flag_valor_m2_muito_baixo.")
 
     if low_transaction_vvr != EXPECTED_LOW_TRANSACTION_VVR:
         raise ValueError("Quantidade inesperada para flag_transacao_muito_abaixo_vvr.")
+
+    if both_flags != EXPECTED_BOTH_FLAGS:
+        raise ValueError("Quantidade inesperada para a interseção das flags.")
+
+    if flag_union != EXPECTED_FLAG_UNION:
+        raise ValueError("Quantidade inesperada para a união das flags.")
+
+    if valid_rows != EXPECTED_VALID_ROWS:
+        raise ValueError("Quantidade inesperada de registros economicamente válidos.")
 
     print("\n7. INTERVALOS DE IDADE")
     print("-" * 80)

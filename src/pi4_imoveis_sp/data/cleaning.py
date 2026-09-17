@@ -12,6 +12,9 @@ PROCESSED_FILE = PROJECT_ROOT / "data" / "processed" / "apartments_2025.parquet"
 PURCHASE_AND_SALE = "1.Compra e venda"
 APARTMENT_USE_CODE = 20
 FULL_TRANSFER_PERCENTAGE = 100.0
+TRANSACTION_YEAR = 2025
+TRANSACTION_DATE_COLUMN = "Data de Transação"
+EXPECTED_PROCESSED_ROWS = 64_227
 
 VALUE_COLUMN = "Valor de Transação (declarado pelo contribuinte)"
 VVR_COLUMN = "Valor Venal de Referência (proporcional)"
@@ -47,12 +50,20 @@ def filter_apartment_sales(
     )
 
 
+def filter_transaction_year(
+    dataframe: pl.DataFrame,
+) -> pl.DataFrame:
+    return dataframe.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).dt.year() == TRANSACTION_YEAR
+    )
+
+
 def add_derived_features(
     dataframe: pl.DataFrame,
 ) -> pl.DataFrame:
     return dataframe.with_columns(
         pl.col("CEP").cast(pl.String).str.pad_start(8, "0").alias("cep_normalizado"),
-        (pl.lit(2025) - pl.col(ACC_COLUMN)).alias("idade_imovel"),
+        (pl.lit(TRANSACTION_YEAR) - pl.col(ACC_COLUMN)).alias("idade_imovel"),
         (pl.col(VALUE_COLUMN) / pl.col(AREA_COLUMN)).alias("valor_m2"),
         (pl.col(VALUE_COLUMN) / pl.col(VVR_COLUMN)).alias("razao_transacao_vvr"),
     ).with_columns(
@@ -72,16 +83,17 @@ def add_quality_flags(
 def validate_processed_data(
     dataframe: pl.DataFrame,
 ) -> None:
-    if dataframe.height != 64_951:
+    if dataframe.height != EXPECTED_PROCESSED_ROWS:
         raise ValueError(
             "Quantidade inesperada de apartamentos processados: "
-            f"{dataframe.height:,}. Esperado: 64.951."
+            f"{dataframe.height:,}. Esperado: {EXPECTED_PROCESSED_ROWS:,}."
         )
 
     required_columns = (
         VALUE_COLUMN,
         AREA_COLUMN,
         ACC_COLUMN,
+        TRANSACTION_DATE_COLUMN,
         "cep_normalizado",
         "cep4",
         "idade_imovel",
@@ -97,6 +109,33 @@ def validate_processed_data(
 
     if missing_columns:
         raise ValueError(f"Colunas processadas ausentes: {missing_columns}")
+
+    null_transaction_dates = dataframe.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).is_null()
+    ).height
+
+    if null_transaction_dates:
+        raise ValueError(
+            "Foram encontradas datas de transação nulas no dataset processado."
+        )
+
+    outside_transaction_year = dataframe.filter(
+        pl.col(TRANSACTION_DATE_COLUMN).dt.year() != TRANSACTION_YEAR
+    ).height
+
+    if outside_transaction_year:
+        raise ValueError(
+            f"Foram encontrados {outside_transaction_year} registros fora de "
+            f"{TRANSACTION_YEAR}."
+        )
+
+    minimum_date = dataframe.get_column(TRANSACTION_DATE_COLUMN).min()
+    maximum_date = dataframe.get_column(TRANSACTION_DATE_COLUMN).max()
+
+    if minimum_date.year != TRANSACTION_YEAR or maximum_date.year != TRANSACTION_YEAR:
+        raise ValueError(
+            "As datas mínima e máxima não pertencem ao ano definido para o projeto."
+        )
 
     invalid_cep = dataframe.filter(
         pl.col("cep_normalizado").str.len_chars() != 8
@@ -121,6 +160,7 @@ def build_processed_dataframe(
     dataframe = load_interim_data(path)
 
     dataframe = filter_apartment_sales(dataframe)
+    dataframe = filter_transaction_year(dataframe)
     dataframe = add_derived_features(dataframe)
     dataframe = add_quality_flags(dataframe)
 

@@ -19,7 +19,7 @@ MODEL_FILE = ARTIFACTS_DIR / "apartment_price_model.joblib"
 
 METADATA_FILE = ARTIFACTS_DIR / "model_metadata.json"
 
-EXPECTED_PRODUCTION_ROWS = 63_807
+EXPECTED_PRODUCTION_ROWS = 63_140
 
 FINAL_METRICS = {
     "mae": 228_857.12,

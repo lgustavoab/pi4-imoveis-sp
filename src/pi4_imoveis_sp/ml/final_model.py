@@ -15,12 +15,11 @@ from pi4_imoveis_sp.ml.dataset import (
     TARGET_COLUMN,
     build_model_dataset,
 )
+from pi4_imoveis_sp.ml.split import build_temporal_partitions
 from pi4_imoveis_sp.ml.xgboost_model import build_preprocessor
 
-FINAL_TEST_MONTH = 12
-
-EXPECTED_TRAIN_ROWS = 57_841
-EXPECTED_TEST_ROWS = 5_966
+EXPECTED_TRAIN_ROWS = 57_709
+EXPECTED_TEST_ROWS = 5_431
 
 
 @dataclass(frozen=True)
@@ -104,9 +103,16 @@ def run_final_evaluation() -> FinalEvaluation:
         include_month=False,
     )
 
-    train = dataframe.filter(pl.col("mes_transacao") < FINAL_TEST_MONTH)
+    partitions = build_temporal_partitions(dataframe)
 
-    test = dataframe.filter(pl.col("mes_transacao") == FINAL_TEST_MONTH)
+    train = pl.concat(
+        [
+            partitions.train,
+            partitions.validation,
+        ]
+    )
+
+    test = partitions.test
 
     if train.height != EXPECTED_TRAIN_ROWS:
         raise ValueError(
