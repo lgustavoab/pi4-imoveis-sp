@@ -59,6 +59,7 @@ def main() -> None:
     model = load_model()
     metadata = load_metadata()
     reference_data = load_reference_data()
+    production_training_rows = metadata["production_training_rows"]
 
     pattern_options = get_pattern_options(reference_data)
 
@@ -153,8 +154,9 @@ def main() -> None:
 
     if not submitted:
         st.caption(
-            "O modelo foi desenvolvido a partir das transações "
-            "registradas nas guias de ITBI pagas em 2025."
+            f"O modelo de produção foi treinado nos "
+            f"{format_integer(production_training_rows)} registros "
+            "economicamente válidos com Data de Transação em 2025."
         )
         return
 
@@ -248,9 +250,10 @@ def main() -> None:
 
     if prediction >= 5_000_000:
         st.warning(
-            "Imóveis de alto valor apresentaram erros maiores "
-            "durante a avaliação do modelo. Estimativas nessa "
-            "faixa devem ser interpretadas com maior cautela."
+            "No teste final, a faixa de imóveis com valor declarado a partir "
+            "de R$ 5 milhões apresentou erros substancialmente maiores. "
+            "Esta observação descreve o grupo avaliado e não constitui uma "
+            "margem de erro individual; interprete a estimativa com cautela."
         )
 
     st.divider()

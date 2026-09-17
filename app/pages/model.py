@@ -3,7 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 from pi4_imoveis_sp.ml.inference import load_model_metadata
-from pi4_imoveis_sp.presentation import format_currency
+from pi4_imoveis_sp.presentation import format_currency, format_integer
 from pi4_imoveis_sp.visualization import (
     PLOTLY_CHART_CONFIG,
     lock_chart_interactions,
@@ -32,6 +32,7 @@ def main() -> None:
 
     official_evaluation = metadata["official_evaluation"]
     metrics = official_evaluation["metrics"]
+    production_training_rows = metadata["production_training_rows"]
 
     st.subheader("Avaliação final")
 
@@ -70,15 +71,39 @@ def main() -> None:
         )
 
     st.caption(
-        "Avaliação temporal independente realizada em dezembro de 2025. "
-        "O modelo foi treinado com os registros de janeiro a novembro."
+        "Avaliação temporal independente realizada em 5.431 registros de "
+        "dezembro de 2025. O modelo de avaliação foi treinado em 57.709 "
+        "registros de janeiro a novembro."
     )
 
     st.info(
-        "**Como interpretar:** valores menores de MAE e RMSE indicam "
-        "menores erros de previsão. Para o R², valores mais próximos "
-        "de 1 indicam maior capacidade de explicar a variação observada "
-        "nos dados."
+        "O modelo foi congelado antes da abertura do teste de dezembro, que "
+        "não participou da seleção nem do ajuste. As métricas pertencem ao "
+        "modelo de avaliação temporal; não são uma avaliação do artefato de "
+        f"produção posteriormente treinado nos "
+        f"{format_integer(production_training_rows)} "
+        "registros válidos de 2025."
+    )
+
+    st.subheader("Leitura dos erros no teste final")
+
+    error_1, error_2, error_3, error_4 = st.columns(4)
+
+    with error_1:
+        st.metric("Mediana do erro absoluto", "R$ 84.607,78")
+
+    with error_2:
+        st.metric("Previsões acima do real", "53,31%")
+
+    with error_3:
+        st.metric("Previsões abaixo do real", "46,69%")
+
+    with error_4:
+        st.metric("Erro assinado médio", "-R$ 30.398,29")
+
+    st.caption(
+        "Esses valores descrevem o conjunto de dezembro. O MAE é uma média "
+        "do conjunto e não uma margem fixa para cada apartamento."
     )
 
     st.divider()
@@ -97,23 +122,49 @@ def main() -> None:
                 "Regressão Linear",
                 "Random Forest",
                 "XGBoost inicial (com mês)",
-                "XGBoost selecionado (sem mês)",
+                "XGBoost inicial (sem mês)",
+                "XGBoost ajustado",
             ],
             "MAE": [
-                445_167.17,
-                312_022.97,
-                185_138.04,
-                189_014.61,
-                171_495.65,
+                445_690.03,
+                312_417.38,
+                185_435.77,
+                184_440.95,
+                181_962.60,
+                170_133.00,
+            ],
+            "RMSE": [
+                1_359_439.91,
+                859_369.42,
+                658_238.14,
+                481_673.15,
+                463_993.37,
+                462_107.92,
             ],
             "R²": [
-                -0.0463,
-                0.5815,
-                0.7597,
-                0.8555,
-                0.8707,
+                -0.0464,
+                0.5818,
+                0.7547,
+                0.8686,
+                0.8781,
+                0.8791,
             ],
         }
+    )
+
+    displayed_model_results = model_results.copy()
+    displayed_model_results["MAE"] = displayed_model_results["MAE"].map(format_currency)
+    displayed_model_results["RMSE"] = displayed_model_results["RMSE"].map(
+        format_currency
+    )
+    displayed_model_results["R²"] = displayed_model_results["R²"].map(
+        lambda value: f"{value:.4f}"
+    )
+
+    st.dataframe(
+        displayed_model_results,
+        hide_index=True,
+        width="stretch",
     )
 
     chart_1, chart_2 = st.columns(2)
@@ -170,9 +221,9 @@ def main() -> None:
         )
 
     st.caption(
-        "As comparações acima utilizam novembro como conjunto "
-        "de validação. O resultado final em dezembro foi mantido "
-        "separado durante a seleção do modelo."
+        "A tabela e os gráficos desta seção utilizam exclusivamente a "
+        "validação de novembro de 2025. O teste final de dezembro foi "
+        "mantido separado durante toda a seleção do modelo."
     )
 
     st.divider()
@@ -194,13 +245,32 @@ def main() -> None:
                 "Fração ideal",
             ],
             "Aumento do MAE": [
-                461_077.29,
-                122_226.73,
-                76_834.99,
-                22_185.82,
-                13_649.87,
+                460_785.14,
+                124_343.02,
+                82_576.24,
+                23_649.95,
+                15_721.82,
+            ],
+            "Desvio": [
+                6_331.58,
+                3_620.19,
+                5_289.14,
+                1_499.60,
+                2_524.52,
             ],
         }
+    )
+
+    displayed_importance = feature_importance.copy()
+    displayed_importance["Aumento do MAE"] = displayed_importance["Aumento do MAE"].map(
+        format_currency
+    )
+    displayed_importance["Desvio"] = displayed_importance["Desvio"].map(format_currency)
+
+    st.dataframe(
+        displayed_importance,
+        hide_index=True,
+        width="stretch",
     )
 
     feature_importance = feature_importance.sort_values(
@@ -254,9 +324,9 @@ def main() -> None:
     )
 
     st.info(
-        "A importância indica contribuição para a capacidade preditiva "
-        "do modelo. Ela não demonstra que uma variável causa diretamente "
-        "o aumento ou a redução do valor de um imóvel."
+        "Importância preditiva não representa causalidade. O resultado é "
+        "específico deste modelo e do teste de dezembro; não representa "
+        "valorização causada por uma variável."
     )
 
     st.divider()
@@ -289,11 +359,17 @@ def main() -> None:
         st.markdown(
             """
             **Hiperparâmetros principais:**
+            - `objective = reg:squarederror`
             - `max_depth = 8`
             - `learning_rate = 0.05`
             - `n_estimators = 800`
+            - `min_child_weight = 1`
             - `subsample = 0.8`
             - `colsample_bytree = 0.8`
+            - `reg_lambda = 1.0`
+            - `tree_method = hist`
+            - `random_state = 42`
+            - `n_jobs = -1`
             """
         )
 
@@ -302,16 +378,19 @@ def main() -> None:
     st.subheader("Limitações observadas")
 
     st.warning(
-        "O desempenho do modelo foi inferior para imóveis de valores "
-        "muito elevados e para alguns padrões menos frequentes. "
-        "Esses segmentos devem ser interpretados com maior cautela."
+        "No teste, os 76 imóveis com valor declarado a partir de R$ 5 "
+        "milhões (1,40% dos casos) apresentaram MAE de R$ 3.585.343,55, "
+        "mediana do erro absoluto de R$ 1.656.100,00 e RMSE de "
+        "R$ 7.957.496,16. Estimativas nessa faixa exigem cautela adicional."
     )
 
     st.write(
-        "No conjunto final de dezembro, metade das previsões apresentou "
-        "erro absoluto inferior a aproximadamente R$ 83 mil. Entretanto, "
-        "um pequeno grupo de imóveis de alto valor apresentou erros muito "
-        "elevados, aumentando principalmente o RMSE."
+        "O alvo é o valor de transação declarado pelo contribuinte: não é "
+        "preço de anúncio, valor venal ou avaliação profissional. O modelo "
+        "não dispõe de características como estado de conservação, vagas, "
+        "andar, vista e atributos internos. Os dados estão restritos às "
+        "transações de 2025, e as diferenças de erro entre grupos não "
+        "demonstram causalidade."
     )
 
     st.caption(

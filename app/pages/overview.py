@@ -107,7 +107,8 @@ def main() -> None:
     st.caption(
         "Os valores apresentados correspondem ao valor de transação "
         "declarado pelo contribuinte e aos registros considerados "
-        "economicamente válidos após o tratamento dos dados."
+        "economicamente válidos após o tratamento dos dados. Todos possuem "
+        "Data de Transação no ano de 2025."
     )
 
     dataframe = load_data()
@@ -268,7 +269,7 @@ def main() -> None:
         f"{percentage:.2f}% dos "
         f"{format_integer(analysis_data.height)} "
         "registros economicamente válidos. "
-        f"A base processada completa contém "
+        f"Antes da exclusão pelas flags econômicas, a base processada contém "
         f"{format_integer(dataframe.height)} "
         "apartamentos."
     )
