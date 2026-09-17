@@ -24,13 +24,13 @@ def main() -> None:
 
     print("\nTreinamento concluído.")
 
-    print(f"Registros utilizados: {metadata['training_rows']:,}")
+    print(f"Registros utilizados: {metadata['production_training_rows']:,}")
 
     print("\nArtefatos:")
     print(f"Modelo:    {MODEL_FILE}")
     print(f"Metadados: {METADATA_FILE}")
 
-    print("\nMétricas oficiais preservadas:")
+    print("\nMétricas oficiais preservadas (modelo de avaliação):")
     print(f"MAE:  R$ {metadata['official_evaluation']['metrics']['mae']:,.2f}")
     print(f"RMSE: R$ {metadata['official_evaluation']['metrics']['rmse']:,.2f}")
     print(f"R²:   {metadata['official_evaluation']['metrics']['r2']:.4f}")

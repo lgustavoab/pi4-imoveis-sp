@@ -1,13 +1,22 @@
 import math
+from importlib.metadata import version
+from platform import python_version
 
 from pi4_imoveis_sp.ml.dataset import (
+    CATEGORICAL_FEATURES,
     FEATURE_COLUMNS_WITHOUT_MONTH,
+    NUMERICAL_FEATURES_WITHOUT_MONTH,
     build_model_dataset,
 )
 from pi4_imoveis_sp.ml.inference import (
     load_model_metadata,
     load_production_model,
     predict_apartment_price,
+)
+from pi4_imoveis_sp.ml.production import (
+    EXPECTED_PRODUCTION_ROWS,
+    FINAL_HYPERPARAMETERS,
+    FINAL_METRICS,
 )
 
 
@@ -35,16 +44,63 @@ def main() -> None:
             "As features registradas nos metadados não correspondem ao contrato atual."
         )
 
-    if metadata["training_rows"] != 63_807:
+    if metadata["production_training_rows"] != EXPECTED_PRODUCTION_ROWS:
         raise ValueError(
             "Quantidade de registros de treinamento inesperada nos metadados."
         )
 
+    if metadata["production_training"]["internal_holdout"] is not False:
+        raise ValueError("O metadata descreve incorretamente um holdout de produção.")
+
+    if tuple(metadata["categorical_features"]) != CATEGORICAL_FEATURES:
+        raise ValueError("Contrato de features categóricas inválido.")
+
+    if tuple(metadata["numerical_features"]) != NUMERICAL_FEATURES_WITHOUT_MONTH:
+        raise ValueError("Contrato de features numéricas inválido.")
+
+    if metadata["model"]["hyperparameters"] != FINAL_HYPERPARAMETERS:
+        raise ValueError("Hiperparâmetros registrados divergem do modelo congelado.")
+
+    official_evaluation = metadata["official_evaluation"]
+
+    if official_evaluation["train_rows"] != 57_709:
+        raise ValueError("Quantidade de treino da avaliação oficial inválida.")
+
+    if official_evaluation["test_rows"] != 5_431:
+        raise ValueError("Quantidade de teste da avaliação oficial inválida.")
+
+    if official_evaluation["metrics"] != FINAL_METRICS:
+        raise ValueError("Métricas oficiais registradas incorretamente.")
+
+    expected_environment = {
+        "python": python_version(),
+        "scikit_learn": version("scikit-learn"),
+        "xgboost": version("xgboost"),
+        "pandas": version("pandas"),
+        "polars": version("polars"),
+        "joblib": version("joblib"),
+    }
+
+    if metadata["environment"] != expected_environment:
+        raise ValueError("Versões do ambiente registradas incorretamente.")
+
+    if metadata["project"]["version"] != version("pi4-imoveis-sp"):
+        raise ValueError("Versão do projeto registrada incorretamente.")
+
+    model_parameters = model.named_steps["model"].get_params()
+
+    if any(
+        model_parameters[name] != value for name, value in FINAL_HYPERPARAMETERS.items()
+    ):
+        raise ValueError("O modelo carregado diverge dos hiperparâmetros congelados.")
+
     print(f"Versão do modelo: {metadata['model_version']}")
 
-    print(f"Registros de treinamento: {metadata['training_rows']:,}")
+    print(f"Registros de treinamento: {metadata['production_training_rows']:,}")
 
     print("Contrato de features válido.")
+    print("Hiperparâmetros do Pipeline válidos.")
+    print("Versões do ambiente válidas.")
 
     print("\n3. TESTE DE PREDIÇÃO")
     print("-" * 80)
@@ -53,6 +109,9 @@ def main() -> None:
         exclude_severe_anomalies=True,
         include_month=False,
     )
+
+    if dataframe.height != EXPECTED_PRODUCTION_ROWS:
+        raise ValueError("Quantidade inesperada no dataset real de produção.")
 
     sample = dataframe.row(
         0,
@@ -74,6 +133,9 @@ def main() -> None:
     if prediction <= 0:
         raise ValueError("O modelo produziu uma previsão menor ou igual a zero.")
 
+    if not isinstance(prediction, float):
+        raise TypeError("A inferência não retornou float.")
+
     print(f"Área:          {sample['Área Construída (m2)']} m²")
 
     print(f"CEP4:          {sample['cep4']}")
@@ -90,6 +152,11 @@ def main() -> None:
     )
 
     print(f"Valor previsto: R$ {prediction:,.2f}")
+
+    print(
+        "\nObservação: esta previsão verifica apenas o funcionamento do artefato; "
+        "não é uma métrica de generalização."
+    )
 
     print("\n" + "=" * 80)
     print("MODELO DE PRODUÇÃO VALIDADO COM SUCESSO")

@@ -2,12 +2,15 @@ import json
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
+from platform import python_version
 
 import joblib
 
 from pi4_imoveis_sp.data.cleaning import PROJECT_ROOT
 from pi4_imoveis_sp.ml.dataset import (
+    CATEGORICAL_FEATURES,
     FEATURE_COLUMNS_WITHOUT_MONTH,
+    NUMERICAL_FEATURES_WITHOUT_MONTH,
     TARGET_COLUMN,
     build_model_dataset,
 )
@@ -22,12 +25,13 @@ METADATA_FILE = ARTIFACTS_DIR / "model_metadata.json"
 EXPECTED_PRODUCTION_ROWS = 63_140
 
 FINAL_METRICS = {
-    "mae": 228_857.12,
-    "rmse": 1_044_652.29,
-    "r2": 0.5890,
+    "mae": 231_947.92292769515,
+    "rmse": 1_091_963.084853122,
+    "r2": 0.5729976346033591,
 }
 
 FINAL_HYPERPARAMETERS = {
+    "objective": "reg:squarederror",
     "max_depth": 8,
     "learning_rate": 0.05,
     "n_estimators": 800,
@@ -37,6 +41,7 @@ FINAL_HYPERPARAMETERS = {
     "reg_lambda": 1.0,
     "tree_method": "hist",
     "random_state": 42,
+    "n_jobs": -1,
 }
 
 
@@ -67,13 +72,28 @@ def build_metadata(
         "model_name": "XGBoost Apartment Price Estimator",
         "model_version": "1.0.0",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "training_period": {
-            "start": "2025-01",
-            "end": "2025-12",
+        "project": {
+            "name": "pi4-imoveis-sp",
+            "version": version("pi4-imoveis-sp"),
         },
-        "training_rows": training_rows,
+        "production_training_rows": training_rows,
+        "production_training": {
+            "period": {
+                "start": "2025-01-01",
+                "end": "2025-12-31",
+            },
+            "transaction_year": 2025,
+            "economically_valid_records_only": True,
+            "internal_holdout": False,
+            "description": (
+                "Modelo de produção treinado em todos os registros "
+                "economicamente válidos com Data de Transação em 2025."
+            ),
+        },
         "target": TARGET_COLUMN,
         "features": list(FEATURE_COLUMNS_WITHOUT_MONTH),
+        "categorical_features": list(CATEGORICAL_FEATURES),
+        "numerical_features": list(NUMERICAL_FEATURES_WITHOUT_MONTH),
         "quality_filters": {
             "purchase_and_sale_only": True,
             "apartment_use_code": 20,
@@ -86,13 +106,25 @@ def build_metadata(
             "hyperparameters": FINAL_HYPERPARAMETERS,
         },
         "official_evaluation": {
-            "train_period": "2025-01 to 2025-11",
-            "test_period": "2025-12",
-            "test_rows": 5_966,
+            "description": (
+                "Avaliação temporal oficial congelada antes do treinamento "
+                "do artefato de produção. Estas métricas não avaliam o modelo "
+                "retreinado em todos os registros de 2025."
+            ),
+            "train_period": {
+                "start": "2025-01-01",
+                "end": "2025-11-30",
+            },
+            "test_period": {
+                "start": "2025-12-01",
+                "end": "2025-12-31",
+            },
+            "train_rows": 57_709,
+            "test_rows": 5_431,
             "metrics": FINAL_METRICS,
         },
         "environment": {
-            "python": version("pi4-imoveis-sp"),
+            "python": python_version(),
             "scikit_learn": version("scikit-learn"),
             "xgboost": version("xgboost"),
             "pandas": version("pandas"),
